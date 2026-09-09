@@ -211,7 +211,7 @@ export function App() {
     localStorage.setItem('amorex_utr', JSON.stringify(utrRequests));
   }, [utrRequests]);
 
-  // Firebase Auth Initial Session State Listener
+ // Firebase Auth Initial Session State Listener
   useEffect(() => {
     let isMounted = true;
     // Safety watchdog: ensure loading splash screen resolves cleanly within 1.2s even if offline or slow network
@@ -221,13 +221,19 @@ export function App() {
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       try {
-        if (fbUser && !currentUser) {
+        if (fbUser) {
           const profile = await getUserFromFirestore(fbUser.uid);
           if (profile && isMounted) {
             setCurrentUser(profile);
             if (!profile.isOnboarded && !profile.is_super_admin) {
               setIsOnboardingOpen(true);
             }
+          }
+        } else {
+          if (isMounted) {
+            setCurrentUser(null);
+            localStorage.removeItem('amorex_user');
+            setIsAuthModalOpen(true);
           }
         }
       } catch (e) {
