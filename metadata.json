@@ -1,0 +1,6 @@
+{
+  "name": "Amorex Live",
+  "description": "Amorex Live - Romantic social universe & 1v1 video matching. Features Super Admin financial pricing & coin minting, comprehensive Agent Dashboard with 6-tier commission system, and detailed Gold Coin Details transaction ledger.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

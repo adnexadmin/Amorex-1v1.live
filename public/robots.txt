@@ -1,0 +1,7 @@
+# Google & Search Engine Crawlers
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Canonical Sitemaps
+Sitemap: https://ais-pre-6gz623d4mukxz4oehyd5bz-764140030160.europe-west2.run.app/sitemap.xml
