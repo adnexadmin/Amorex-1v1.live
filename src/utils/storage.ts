@@ -852,6 +852,13 @@ export const saveRegisteredUser = (user: UserProfile, isNewRegistration: boolean
   }
 };
 
+export const getStoredUser = (userId?: string): UserProfile | null => {
+  if (typeof window === 'undefined') return null;
+  if (!userId) return null;
+  const users = getStoredRegisteredUsers();
+  return users.find((u) => u.id === userId || u.displayId === userId || u.email === userId) || null;
+};
+
 export const updateUserTimeSpent = (userId: string, additionalSeconds: number = 10): void => {
   if (typeof window === 'undefined' || !userId) return;
   try {

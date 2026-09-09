@@ -114,7 +114,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur-xl bg-[#090A15]/95 border-b border-white/10 px-2.5 sm:px-6 pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 shadow-lg transition-all">
+    <header
+      id="app-top-header"
+      className="app-header sticky top-0 z-40 w-full backdrop-blur-xl bg-[#090A15]/95 border-b border-white/10 px-2.5 sm:px-6 pb-2 shadow-lg transition-all"
+      style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+    >
       {/* Coin Rain Global Marquee if active */}
       {activeCoinRain && (
         <motion.div

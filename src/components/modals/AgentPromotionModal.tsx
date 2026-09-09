@@ -21,8 +21,10 @@ interface AgentPromotionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onApplyWithSuperAdmin: () => void;
-  onOpenShareModal: () => void;
+  onOpenShareModal?: () => void;
+  onOpenShare?: () => void;
   spentCoinsAmount?: number;
+  triggerSpentCoins?: number;
 }
 
 export const AgentPromotionModal: React.FC<AgentPromotionModalProps> = ({
@@ -30,8 +32,14 @@ export const AgentPromotionModal: React.FC<AgentPromotionModalProps> = ({
   onClose,
   onApplyWithSuperAdmin,
   onOpenShareModal,
-  spentCoinsAmount = 240
+  onOpenShare,
+  spentCoinsAmount = 240,
+  triggerSpentCoins
 }) => {
+  const handleShareClick = () => {
+    onOpenShareModal?.();
+    onOpenShare?.();
+  };
   // Commission calculator state (simulated monthly coin recharge)
   const [calcVolume, setCalcVolume] = useState(150000);
 
@@ -256,7 +264,7 @@ export const AgentPromotionModal: React.FC<AgentPromotionModalProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
-                    onOpenShareModal();
+                    handleShareClick();
                   }}
                   className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 active:scale-[0.99] border border-white/15 font-semibold text-xs text-white flex items-center justify-center gap-1.5 transition-colors"
                 >

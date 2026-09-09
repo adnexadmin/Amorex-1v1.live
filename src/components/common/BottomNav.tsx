@@ -52,36 +52,36 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   }> = [
     {
       id: 'LIVE',
-      label: t('nav_live', currentLang),
+      label: t('nav.live', currentLang) || 'Live',
       icon: Radio
     },
     {
       id: 'MOMENTS',
-      label: t('nav_moments', currentLang),
+      label: t('nav.moments', currentLang) || 'Moments',
       icon: ImageIcon
     },
     {
       id: 'PARTY',
-      label: t('nav_party', currentLang),
+      label: t('nav.party', currentLang) || 'Party',
       icon: Users
     },
     {
       id: 'MESSAGES',
-      label: t('nav_chat', currentLang),
+      label: t('nav.chat', currentLang) || t('nav.messages', currentLang) || 'Chat',
       icon: MessageCircle,
       count: unreadCount
     },
     {
       id: 'PROFILE',
-      label: t('nav_profile', currentLang),
+      label: t('nav.profile', currentLang) || 'Profile',
       icon: UserIcon,
       avatar: user?.avatarUrl || user?.avatar
     }
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 sm:h-20 pb-[env(safe-area-inset-bottom,0px)] box-content glass bg-[#090A15]/95 backdrop-blur-xl flex items-center justify-around px-4 border-t border-white/10 z-40">
-      <div className="max-w-lg w-full mx-auto flex items-center justify-around">
+    <nav className="fixed bottom-0 left-0 right-0 h-16 sm:h-20 pb-[env(safe-area-inset-bottom,0px)] box-content bg-[#090A15]/95 backdrop-blur-xl flex items-center justify-around px-2 sm:px-4 border-t border-white/10 z-40">
+      <div className="max-w-lg w-full mx-auto flex items-center justify-between gap-1">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -91,52 +91,52 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               id={`bottom-nav-${tab.id.toLowerCase()}`}
               key={tab.id}
               onClick={() => handleSelect(tab.id)}
-              className={`flex flex-col items-center gap-1 cursor-pointer transition-all ${
-                isActive ? 'opacity-100' : 'opacity-50 hover:opacity-90'
+              className={`flex-1 min-w-0 flex flex-col items-center justify-center py-1 px-1 cursor-pointer transition-all select-none ${
+                isActive ? 'opacity-100' : 'opacity-60 hover:opacity-100'
               }`}
             >
               <div className="relative">
                 {isActive ? (
                   <motion.div
                     layoutId="activeTabIcon"
-                    className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-[#FF2E93] to-[#FFD700] rounded-xl shadow-lg shadow-[#FF2E93]/30"
+                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-gradient-to-br from-[#FF2E93] to-[#FFD700] rounded-xl shadow-lg shadow-[#FF2E93]/30"
                   >
                     {tab.avatar ? (
                       <img
                         referrerPolicy="no-referrer"
                         src={tab.avatar}
                         alt="Profile"
-                        className="w-8 h-8 rounded-lg object-cover"
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover"
                       />
                     ) : (
                       <Icon size={20} className="text-white" />
                     )}
                   </motion.div>
                 ) : (
-                  <div className="w-10 h-10 flex items-center justify-center">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center">
                     {tab.avatar ? (
                       <img
                         referrerPolicy="no-referrer"
                         src={tab.avatar}
                         alt="Profile"
-                        className="w-7 h-7 rounded-lg object-cover border border-white/20"
+                        className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg object-cover border border-white/20"
                       />
                     ) : (
-                      <Icon size={22} className="text-white" />
+                      <Icon size={21} className="text-white/80" />
                     )}
                   </div>
                 )}
 
                 {/* Badge for chat notifications */}
                 {Boolean(tab.count && tab.count > 0) && (
-                  <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-[#FF2E93] rounded-full border-2 border-[#090A15] flex items-center justify-center text-[10px] font-bold text-white shadow-md">
+                  <div className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-[#FF2E93] rounded-full border-2 border-[#090A15] flex items-center justify-center text-[9px] font-bold text-white shadow-md">
                     {tab.count}
                   </div>
                 )}
               </div>
 
               <span
-                className={`text-[10px] font-black tracking-widest uppercase ${
+                className={`text-[10px] sm:text-[11px] font-bold tracking-tight text-center truncate max-w-full leading-tight mt-0.5 ${
                   isActive ? 'text-[#FF2E93]' : 'text-white/70'
                 }`}
               >

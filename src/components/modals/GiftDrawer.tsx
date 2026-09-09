@@ -8,8 +8,9 @@ import confetti from 'canvas-confetti';
 
 interface GiftDrawerProps {
   recipientName: string;
-  user: UserProfile;
-  onSendGift: (gift: VirtualGift) => void;
+  user?: UserProfile;
+  userCoins?: number;
+  onSendGift: (gift: VirtualGift, count?: number) => void;
   onClose: () => void;
   onOpenRecharge: () => void;
 }
@@ -17,6 +18,7 @@ interface GiftDrawerProps {
 export const GiftDrawer: React.FC<GiftDrawerProps> = ({
   recipientName,
   user,
+  userCoins,
   onSendGift,
   onClose,
   onOpenRecharge
@@ -33,10 +35,11 @@ export const GiftDrawer: React.FC<GiftDrawerProps> = ({
     ? VIRTUAL_GIFTS
     : VIRTUAL_GIFTS.filter((g) => g.category === activeCategory);
 
-  const totalPrice = selectedGift.price * comboMultiplier;
+  const totalPrice = (selectedGift.price || selectedGift.coinCost || 0) * comboMultiplier;
 
   const handleSend = () => {
-    if (user.coins < totalPrice) {
+    const currentCoins = user?.coins ?? userCoins ?? 0;
+    if (currentCoins < totalPrice) {
       sound.playClick();
       onOpenRecharge();
       return;
@@ -59,10 +62,8 @@ export const GiftDrawer: React.FC<GiftDrawerProps> = ({
       });
     }
 
-    // Call onSendGift with multiplied payload or repeat
-    for (let i = 0; i < comboMultiplier; i++) {
-      onSendGift(selectedGift);
-    }
+    // Trigger onSendGift with count
+    onSendGift(selectedGift, comboMultiplier);
 
     setTimeout(() => {
       setActiveAnimation(null);
@@ -93,7 +94,7 @@ export const GiftDrawer: React.FC<GiftDrawerProps> = ({
                 transition={{ duration: 1.5, repeat: Infinity }}
                 className="text-8xl md:text-9xl filter drop-shadow-[0_0_30px_rgba(255,46,147,0.8)] z-10"
               >
-                {activeAnimation.icon}
+                {activeAnimation.gift.icon}
               </motion.div>
 
               <motion.div

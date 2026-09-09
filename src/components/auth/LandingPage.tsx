@@ -37,8 +37,8 @@ import {
 } from '../../utils/storage';
 
 interface LandingPageProps {
-  onOpenAuth?: () => void;
-  onOpenAuthModal?: () => void;
+  onOpenAuth?: (initialMode?: 'login' | 'signup') => void;
+  onOpenAuthModal?: (initialMode?: 'login' | 'signup') => void;
   onAdminLogin?: (user: UserProfile) => void;
 }
 
@@ -185,10 +185,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setShowInstallModal(true);
   };
 
-  const handleOpenAuth = () => {
+  const handleOpenAuth = (mode: 'login' | 'signup' = 'login') => {
     sound.playClick();
-    if (onOpenAuthModal) onOpenAuthModal();
-    else if (onOpenAuth) onOpenAuth();
+    if (onOpenAuthModal) onOpenAuthModal(mode);
+    else if (onOpenAuth) onOpenAuth(mode);
   };
 
   const valueProps = [
@@ -267,7 +267,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <button
               id="landing-header-join-btn"
-              onClick={handleOpenAuth}
+              onClick={() => handleOpenAuth('signup')}
               className="text-xs sm:text-sm font-bold px-4 sm:px-6 py-2 sm:py-2.5 rounded-full border border-pink-500/50 bg-white/5 hover:bg-gradient-to-r hover:from-[#FF1744]/20 hover:to-[#FF2E93]/20 text-white hover:border-pink-400 hover:shadow-[0_0_20px_rgba(255,23,68,0.35)] active:scale-95 transition-all tracking-wider flex items-center gap-2 cursor-pointer"
             >
               <span className="bg-gradient-to-r from-white via-pink-200 to-white bg-clip-text text-transparent uppercase">
@@ -318,7 +318,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3.5">
             <button
               id="landing-enter-amorex-btn"
-              onClick={handleOpenAuth}
+              onClick={() => handleOpenAuth('signup')}
               className="w-full sm:w-auto flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-full bg-gradient-to-r from-[#FF1744] via-[#FF2E93] to-[#00D2FF] text-white font-black text-sm shadow-[0_0_25px_rgba(255,23,68,0.6)] hover:scale-105 active:scale-95 transition-all border border-white/20 cursor-pointer"
             >
               <span>ENTER AMOREX LIVE</span>

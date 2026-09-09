@@ -63,7 +63,17 @@ export const PartyTab: React.FC<PartyTabProps> = ({
     hostId: 'host-1',
     hostName: 'Aanya Sharma',
     hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+    coverImage: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&auto=format&fit=crop&q=80',
+    category: 'Chat',
+    seats: [],
+    mode: 'audio',
+    wallpaper: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800&auto=format&fit=crop&q=80',
+    bgmPlaying: false,
+    bgmGenre: 'Romantic',
+    isLocked: false,
+    onlineCount: 4280,
     viewerCount: 4280,
+    tag: 'Bollywood',
     tags: ['Karaoke', 'Bollywood', '12Seats'],
     region: 'India'
   });

@@ -29,6 +29,12 @@ import {
   getStoredRegisteredUsers
 } from './utils/storage';
 import { sound } from './utils/audio';
+import {
+  auth,
+  getUserFromFirestore,
+  signOutFirebaseUser
+} from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 // Components
 import { Navbar } from './components/common/Navbar';
@@ -49,6 +55,7 @@ import { MediaPermissionModal } from './components/modals/MediaPermissionModal';
 import { PWAInstallModal } from './components/common/PWAInstallModal';
 import { AppShareModal } from './components/modals/AppShareModal';
 import { AgentPromotionModal } from './components/modals/AgentPromotionModal';
+import { LoadingSplashScreen } from './components/common/LoadingSplashScreen';
 
 // 5 Core Tabs
 import { LiveTab } from './components/tabs/LiveTab';
@@ -65,7 +72,9 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('LIVE');
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalInitialMode, setAuthModalInitialMode] = useState<'login' | 'signup'>('login');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [isRechargeModalOpen, setIsRechargeModalOpen] = useState<boolean>(false);
   const [isAdminSuiteOpen, setIsAdminSuiteOpen] = useState<boolean>(false);
@@ -202,17 +211,56 @@ export function App() {
     localStorage.setItem('amorex_utr', JSON.stringify(utrRequests));
   }, [utrRequests]);
 
+  // Firebase Auth Initial Session State Listener
+  useEffect(() => {
+    let isMounted = true;
+    // Safety watchdog: ensure loading splash screen resolves cleanly within 1.2s even if offline or slow network
+    const watchdog = setTimeout(() => {
+      if (isMounted) setIsAuthLoading(false);
+    }, 1200);
+
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      try {
+        if (fbUser && !currentUser) {
+          const profile = await getUserFromFirestore(fbUser.uid);
+          if (profile && isMounted) {
+            setCurrentUser(profile);
+            if (!profile.isOnboarded && !profile.is_super_admin) {
+              setIsOnboardingOpen(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Auth state restore notice:', e);
+      } finally {
+        if (isMounted) {
+          clearTimeout(watchdog);
+          setIsAuthLoading(false);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(watchdog);
+      unsubscribe();
+    };
+  }, []);
+
   // Auth Handlers
-  const handleAuthSuccess = (user: UserProfile) => {
+  const handleAuthSuccess = (user: UserProfile, isNewUser: boolean = false) => {
     setCurrentUser(user);
     if (!user.is_super_admin) {
       saveRegisteredUser(user, true);
     }
     setIsAuthModalOpen(false);
 
-    // If user has no completed face verification or nickname, show onboarding
-    if (!user.faceVerified && !user.is_super_admin) {
+    // If new user or onboarding incomplete, redirect to profile setup
+    if ((isNewUser || !user.isOnboarded) && !user.is_super_admin) {
       setIsOnboardingOpen(true);
+    } else {
+      setIsOnboardingOpen(false);
+      setActiveTab('LIVE');
     }
   };
 
@@ -225,7 +273,8 @@ export function App() {
     setActiveTab('LIVE');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOutFirebaseUser();
     setCurrentUser(null);
     setIsAdminSuiteOpen(false);
     setIsGiftDrawerOpen(false);
@@ -539,17 +588,26 @@ export function App() {
     );
   };
 
-  // If no logged in user, render Landing Page (Mandatory Auth Only)
+  // 1. While Firebase Auth is checking the initial user session, display branded loading splash screen
+  if (isAuthLoading) {
+    return <LoadingSplashScreen message="Authenticating session..." />;
+  }
+
+  // 2. If no logged in user, render Landing Page (Mandatory Auth Only)
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#090A15] text-white">
         <LandingPage
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onOpenAuthModal={(mode = 'login') => {
+            setAuthModalInitialMode(mode);
+            setIsAuthModalOpen(true);
+          }}
           onAdminLogin={(adminUser) => handleAuthSuccess(adminUser)}
         />
 
         {isAuthModalOpen && (
           <AuthModal
+            initialMode={authModalInitialMode}
             onClose={() => setIsAuthModalOpen(false)}
             onSuccess={handleAuthSuccess}
           />
@@ -567,6 +625,8 @@ export function App() {
       {/* Top Fixed Navbar */}
       <Navbar
         user={currentUser}
+        onOpenProfile={() => setActiveTab('PROFILE')}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenRecharge={() => setIsRechargeModalOpen(true)}
         onOpenAdminSuite={() => setIsAdminSuiteOpen(true)}
         onOpenShare={() => setIsShareModalOpen(true)}
@@ -643,6 +703,7 @@ export function App() {
       {/* Persistent Bottom 5-Tab Navigation Dock */}
       <BottomNav
         activeTab={activeTab}
+        user={currentUser}
         onTabChange={(tab) => {
           sound.playClick();
           setActiveTab(tab);
@@ -676,7 +737,7 @@ export function App() {
       {/* Virtual Gifts Drawer */}
       {isGiftDrawerOpen && (
         <GiftDrawer
-          userCoins={currentUser.coins}
+          userCoins={currentUser?.coins ?? 0}
           recipientName={giftRecipientName}
           onSendGift={handleSendGift}
           onClose={() => setIsGiftDrawerOpen(false)}
@@ -750,11 +811,22 @@ export function App() {
         />
       )}
 
+      {/* Authentication Gateway Modal */}
+      {isAuthModalOpen && (
+        <AuthModal
+          initialMode={authModalInitialMode}
+          onClose={() => setIsAuthModalOpen(false)}
+          onSuccess={handleAuthSuccess}
+        />
+      )}
+
       {/* 4-Step Onboarding Profile Setup */}
       {isOnboardingOpen && (
         <OnboardingModal
           user={currentUser}
+          initialUser={currentUser}
           onComplete={handleOnboardingComplete}
+          onClose={() => setIsOnboardingOpen(false)}
         />
       )}
 

@@ -93,7 +93,8 @@ export const LiveTab: React.FC<LiveTabProps> = ({
       return false;
     }
     if (levelBadgeFilter === 'similar') {
-      const levelDiff = Math.abs(host.level - user.level);
+      const userLevel = user?.level ?? 1;
+      const levelDiff = Math.abs(host.level - userLevel);
       if (levelDiff > 20) return false;
     }
     return true;
@@ -125,7 +126,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           (targetGender === 'all' || h.gender === targetGender) &&
           h.isLive &&
           (targetLanguage === 'All' || hostSpeaksLanguage(h, targetLanguage)) &&
-          (levelBadgeFilter === 'any' || Math.abs(h.level - user.level) <= 25)
+          (levelBadgeFilter === 'any' || Math.abs(h.level - (user?.level ?? 1)) <= 25)
       );
       const chosen =
         eligible.length > 0
@@ -378,7 +379,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
               </span>
             </div>
             <div className="text-white/60 text-[11px] font-medium mt-0.5">
-              Connect in 60s • {user.vouchers > 0 ? `${user.vouchers} Free Vouchers Active` : 'Instant Video Call'}
+              Connect in 60s • {(user?.vouchers ?? 0) > 0 ? `${user?.vouchers} Free Vouchers Active` : 'Instant Video Call'}
             </div>
           </div>
         </div>

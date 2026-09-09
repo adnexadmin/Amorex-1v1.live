@@ -131,9 +131,9 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({
     };
   });
 
-  // Real-time wallet balances bound to user data & live storage updates
-  const [coinBalance, setCoinBalance] = useState<number>(userData.coins || 0);
-  const [gemBalance, setGemBalance] = useState<number>(userData.gems || 0);
+  // Real-time wallet balances derived cleanly from user state
+  const coinBalance = userData.coins ?? 0;
+  const gemBalance = userData.gems ?? 0;
 
   // Active view routing
   const [activeView, setActiveView] = useState<DashboardSubView>('DASHBOARD');
@@ -165,53 +165,37 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({
     setTimeout(() => setFeedbackToast(''), 3000);
   };
 
-  // Fetch core user data from users table on mount and listen to updates
-  useEffect(() => {
-    const syncUserData = () => {
-      if (typeof window === 'undefined') return;
-      const stored = localStorage.getItem('amorex_user');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          setUserData(parsed);
-          setCoinBalance(parsed.coins ?? 0);
-          setGemBalance(parsed.gems ?? 0);
-          return;
-        } catch (e) {
-          // ignore
-        }
-      }
-      const registered = getStoredRegisteredUsers();
-      if (registered.length > 0) {
-        const found = registered.find((u) => u.id === userData.id || u.displayId === userData.displayId) || registered[0];
-        setUserData(found);
-        setCoinBalance(found.coins ?? 0);
-        setGemBalance(found.gems ?? 0);
-      }
-    };
-
-    syncUserData();
-
-    const handleStorageChange = () => syncUserData();
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('amorex_users_updated', handleStorageChange);
-    window.addEventListener('amorex_user_updated', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('amorex_users_updated', handleStorageChange);
-      window.removeEventListener('amorex_user_updated', handleStorageChange);
-    };
-  }, [userData.id, userData.displayId]);
-
-  // Keep coin & gem balance in sync if parent passed updated initialUser
+  // Synchronize user state when initialUser prop updates from parent
   useEffect(() => {
     if (initialUser) {
-      setUserData(initialUser);
-      setCoinBalance(initialUser.coins ?? 0);
-      setGemBalance(initialUser.gems ?? 0);
+      setUserData((prev) => {
+        if (prev.id === initialUser.id && prev.coins === initialUser.coins && prev.gems === initialUser.gems && prev.avatar === initialUser.avatar && prev.name === initialUser.name) {
+          return prev;
+        }
+        return initialUser;
+      });
     }
   }, [initialUser]);
+
+  // Synchronize user profile updates dispatched globally
+  useEffect(() => {
+    const handleUserUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<UserProfile>;
+      if (customEvent.detail) {
+        setUserData((prev) => {
+          if (prev.id === customEvent.detail.id && JSON.stringify(prev) === JSON.stringify(customEvent.detail)) {
+            return prev;
+          }
+          return customEvent.detail;
+        });
+      }
+    };
+
+    window.addEventListener('amorex_user_updated', handleUserUpdate);
+    return () => {
+      window.removeEventListener('amorex_user_updated', handleUserUpdate);
+    };
+  }, []);
 
   const handleCopyId = () => {
     sound.playClick();
@@ -230,8 +214,6 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({
         onBack={() => setActiveView('DASHBOARD')}
         onSaveUser={(updated) => {
           setUserData(updated);
-          setCoinBalance(updated.coins ?? 0);
-          setGemBalance(updated.gems ?? 0);
         }}
       />
     );
@@ -334,20 +316,6 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({
         </div>
 
         <div className="p-4 space-y-4">
-          {activeView === 'AGENT' && (
-            <AgentPromotionBanner
-              variant="profile"
-              onContactAdmin={() => {
-                sound.playClick();
-                onOpenSupportBot?.({
-                  source: 'Agent Application',
-                  query: 'I want to apply as an official Amorex Agent and earn up to 10% commission on every user coin top-up!'
-                });
-              }}
-              onOpenShareModal={onOpenShareModal}
-            />
-          )}
-
           {activeView === 'EVENT' && (
             <div className="space-y-3">
               <div className="p-5 rounded-2xl bg-gradient-to-r from-pink-900/40 to-purple-900/40 border border-pink-500/30 space-y-2">
@@ -358,24 +326,6 @@ export const ProfileDashboard: React.FC<ProfileDashboardProps> = ({
               <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-xs text-gray-400">
                 Check back daily for 2x coin recharge hours and lucky box drops.
               </div>
-            </div>
-          )}
-
-          {activeView === 'CP' && (
-            <div className="p-5 rounded-2xl bg-pink-950/30 border border-pink-500/30 space-y-4 text-center">
-              <div className="w-14 h-14 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center mx-auto">
-                <Heart size={28} className="fill-pink-500" />
-              </div>
-              <h3 className="text-base font-black text-white">Couple Space (CP)</h3>
-              <p className="text-xs text-gray-300 max-w-sm mx-auto">
-                Form an exclusive CP bond with your favorite host or friend. Unlock custom love rings, joint live room entrances, and intimacy rankings.
-              </p>
-              <button
-                onClick={() => showToast('Proposal feature ready in party rooms!')}
-                className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black text-xs rounded-full shadow-lg"
-              >
-                Find CP Partner
-              </button>
             </div>
           )}
 

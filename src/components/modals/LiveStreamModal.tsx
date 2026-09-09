@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
+import { LiveUserProfileModal } from './LiveUserProfileModal';
 
 interface LiveStreamModalProps {
   host: StreamHost;
@@ -77,6 +78,7 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
   ]);
   const [commentInput, setCommentInput] = useState<string>('');
   const [floatingHearts, setFloatingHearts] = useState<Array<{ id: number; x: number }>>([]);
+  const [selectedProfile, setSelectedProfile] = useState<StreamHost | UserProfile | null>(null);
 
   // Generate deterministic 8-digit Host ID (e.g., 84920193)
   const hostId8Digit = React.useMemo(() => {
@@ -154,9 +156,20 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
           </div>
 
           {/* 1. TOP HEADER: Host Avatar with Rotating VIP Level Frame, Nickname, 8-Digit ID, Audience Count, + Follow */}
-          <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-30">
-            {/* Host Identity Card */}
-            <div className="flex items-center gap-2 bg-[#090A15]/80 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/15 shadow-lg">
+          <div
+            className="absolute left-3 right-3 flex items-center justify-between z-30"
+            style={{ top: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
+          >
+            {/* Host Identity Card (Click to open Profile Modal) */}
+            <div
+              id="stream-host-profile-card"
+              onClick={() => {
+                sound.playClick();
+                setSelectedProfile(host);
+              }}
+              className="flex items-center gap-2 bg-[#090A15]/80 hover:bg-[#151833] backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/15 hover:border-pink-500/50 shadow-lg cursor-pointer transition-all active:scale-95"
+              title="View Host Profile"
+            >
               {/* Avatar with Rotating VIP Frame */}
               <div className="relative">
                 <motion.div
@@ -195,7 +208,8 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
 
               {/* + Follow Button */}
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   sound.playHeartLike();
                   onToggleFollow(host.id);
                   confetti({ particleCount: 30, spread: 50, origin: { y: 0.2 } });
@@ -310,15 +324,28 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
           </div>
 
           {/* Stream Live Comments Overlay (Bottom-Left) */}
-          <div className="absolute bottom-20 left-3 right-3 space-y-1.5 max-h-48 overflow-y-auto no-scrollbar pointer-events-none z-20">
+          <div className="absolute bottom-20 left-3 right-3 space-y-1.5 max-h-48 overflow-y-auto no-scrollbar z-20 pointer-events-auto">
             {streamComments.map((c) => (
               <div
                 key={c.id}
-                className={`backdrop-blur-md rounded-xl px-3 py-1 text-xs w-fit max-w-[88%] border transition-all ${
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sound.playClick();
+                  setSelectedProfile({
+                    id: `user_${c.id}`,
+                    name: c.user,
+                    level: c.level,
+                    displayId: `782${c.level}912`,
+                    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+                    role: 'user'
+                  } as any);
+                }}
+                className={`backdrop-blur-md rounded-xl px-3 py-1 text-xs w-fit max-w-[88%] border transition-all cursor-pointer hover:border-pink-400/50 active:scale-98 ${
                   c.isGift
                     ? 'bg-gradient-to-r from-amber-500/30 to-[#FF2E93]/30 border-amber-400/40 text-amber-200 font-bold shadow-[0_0_10px_rgba(255,215,0,0.3)]'
                     : 'bg-black/60 border-white/10 text-white/95'
                 }`}
+                title="Tap to view commenter profile"
               >
                 <span className="text-[9px] font-black bg-gradient-to-r from-amber-400 to-orange-500 text-black px-1 py-0.2 rounded-sm mr-1.5">
                   Lv.{c.level}
@@ -386,6 +413,21 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
           </form>
         </div>
       </motion.div>
+
+      {/* In-Stream User Profile Modal with Prominent 'Back' Button & router.back() */}
+      <AnimatePresence>
+        {selectedProfile && (
+          <LiveUserProfileModal
+            targetUser={selectedProfile}
+            currentUser={user}
+            isFollowed={isFollowed}
+            onToggleFollow={onToggleFollow}
+            onStart1v1Call={onStart1v1Call}
+            onOpenGiftDrawer={onOpenGiftDrawer}
+            onClose={() => setSelectedProfile(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

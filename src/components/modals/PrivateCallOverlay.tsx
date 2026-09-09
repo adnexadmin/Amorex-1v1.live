@@ -643,8 +643,6 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
               ? 'w-full aspect-video max-h-full rounded-none sm:rounded-2xl shadow-2xl'
               : effectiveFitMode === '9:16'
               ? 'h-full aspect-[9/16] max-w-full rounded-none sm:rounded-2xl shadow-2xl'
-              : effectiveFitMode === '4:3'
-              ? 'w-full aspect-[4/3] max-h-full rounded-none sm:rounded-2xl shadow-2xl'
               : effectiveFitMode === 'contain'
               ? 'w-full h-full flex items-center justify-center'
               : 'w-full h-full'

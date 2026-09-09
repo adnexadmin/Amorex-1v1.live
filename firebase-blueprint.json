@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with authentication and financial balances",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-zA-Z0-9_]+$" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 128 },
+        "phoneNumber": { "type": "string", "maxLength": 30 },
+        "avatar": { "type": "string", "maxLength": 500 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "gender": { "type": "string", "enum": ["female", "male", "non-binary"] },
+        "age": { "type": "number" },
+        "bio": { "type": "string", "maxLength": 500 },
+        "coins": { "type": "number" },
+        "gems": { "type": "number" },
+        "vip_level": { "type": "number" },
+        "role": { "type": "string", "enum": ["user", "super_admin", "agent", "host"] },
+        "isOnboarded": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "username", "name", "role", "isOnboarded"]
+    },
+    "UserLocation": {
+      "title": "UserLocation",
+      "description": "Real-time geographical location captured during onboarding or app usage",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 30 },
+        "city": { "type": "string", "maxLength": 100 },
+        "country": { "type": "string", "maxLength": 100 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "accuracy": { "type": "number" },
+        "ipBased": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "city", "country", "latitude", "longitude"]
+    },
+    "UsernameRecord": {
+      "title": "UsernameRecord",
+      "description": "Index for ensuring global username uniqueness across users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 30 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "username"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/userLocations/{userId}": {
+      "schema": "UserLocation",
+      "description": "User location documents keyed by Firebase Auth UID"
+    },
+    "/usernames/{username}": {
+      "schema": "UsernameRecord",
+      "description": "Global unique username lookup documents"
+    }
+  }
+}

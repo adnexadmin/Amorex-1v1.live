@@ -62,10 +62,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   en: {
     // Navigation & General
     'nav.live': 'Live',
+    'nav_live': 'Live',
     'nav.party': 'Party',
+    'nav_party': 'Party',
     'nav.moments': 'Moments',
-    'nav.messages': 'Messages',
+    'nav_moments': 'Moments',
+    'nav.chat': 'Chat',
+    'nav_chat': 'Chat',
+    'nav.messages': 'Chat',
+    'nav_messages': 'Chat',
     'nav.profile': 'Profile',
+    'nav_profile': 'Profile',
     'common.coins': 'Coins',
     'common.diamonds': 'Diamonds',
     'common.recharge': 'Recharge',
@@ -193,10 +200,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   ml: {
     // Navigation & General
     'nav.live': 'ലൈവ്',
+    'nav_live': 'ലൈവ്',
     'nav.party': 'പാർട്ടി',
+    'nav_party': 'പാർട്ടി',
     'nav.moments': 'മൊമെന്റ്സ്',
-    'nav.messages': 'മെസ്സേജുകൾ',
+    'nav_moments': 'മൊമെന്റ്സ്',
+    'nav.chat': 'ചാറ്റ്',
+    'nav_chat': 'ചാറ്റ്',
+    'nav.messages': 'ചാറ്റ്',
+    'nav_messages': 'ചാറ്റ്',
     'nav.profile': 'പ്രൊഫൈൽ',
+    'nav_profile': 'പ്രൊഫൈൽ',
     'common.coins': 'കോയിനുകൾ',
     'common.diamonds': 'ഡയമണ്ട്സ്',
     'common.recharge': 'റീചാർജ്',
@@ -324,10 +338,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   hi: {
     // Navigation & General
     'nav.live': 'लाइव',
+    'nav_live': 'लाइव',
     'nav.party': 'पार्टी',
+    'nav_party': 'पार्टी',
     'nav.moments': 'मोमेंट्स',
-    'nav.messages': 'संदेश',
+    'nav_moments': 'मोमेंट्स',
+    'nav.chat': 'चैट',
+    'nav_chat': 'चैट',
+    'nav.messages': 'चैट',
+    'nav_messages': 'चैट',
     'nav.profile': 'प्रोफाइल',
+    'nav_profile': 'प्रोफाइल',
     'common.coins': 'सिक्के',
     'common.diamonds': 'हीरे',
     'common.recharge': 'रिचार्ज',
@@ -455,10 +476,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   ar: {
     // Navigation & General
     'nav.live': 'مباشر',
+    'nav_live': 'مباشر',
     'nav.party': 'الحفلة',
+    'nav_party': 'الحفلة',
     'nav.moments': 'لحظات',
-    'nav.messages': 'الرسائل',
+    'nav_moments': 'لحظات',
+    'nav.chat': 'دردشة',
+    'nav_chat': 'دردشة',
+    'nav.messages': 'دردشة',
+    'nav_messages': 'دردشة',
     'nav.profile': 'الملف الشخصي',
+    'nav_profile': 'الملف الشخصي',
     'common.coins': 'العملات',
     'common.diamonds': 'الماس',
     'common.recharge': 'شحن الرصيد',
@@ -586,10 +614,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   ta: {
     // Navigation & General
     'nav.live': 'லைவ்',
+    'nav_live': 'லைவ்',
     'nav.party': 'பார்ட்டி',
+    'nav_party': 'பார்ட்டி',
     'nav.moments': 'நினைவுகள்',
-    'nav.messages': 'செய்திகள்',
+    'nav_moments': 'நினைவுகள்',
+    'nav.chat': 'அரட்டை',
+    'nav_chat': 'அரட்டை',
+    'nav.messages': 'அரட்டை',
+    'nav_messages': 'அரட்டை',
     'nav.profile': 'சுயவிவரம்',
+    'nav_profile': 'சுயவிவரம்',
     'common.coins': 'நாணயங்கள்',
     'common.diamonds': 'வைரங்கள்',
     'common.recharge': 'ரீசார்ஜ்',
@@ -715,6 +750,21 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   }
 };
 
+const CLEAN_FALLBACKS: Record<string, string> = {
+  'nav.live': 'Live',
+  'nav_live': 'Live',
+  'nav.moments': 'Moments',
+  'nav_moments': 'Moments',
+  'nav.party': 'Party',
+  'nav_party': 'Party',
+  'nav.chat': 'Chat',
+  'nav_chat': 'Chat',
+  'nav.messages': 'Chat',
+  'nav_messages': 'Chat',
+  'nav.profile': 'Profile',
+  'nav_profile': 'Profile'
+};
+
 /**
  * Universal Translation Helper Function with Parameter Interpolation
  */
@@ -725,6 +775,8 @@ export const t = (key: string, customLang?: AppLanguage, params?: Record<string,
     result = TRANSLATIONS[activeLang][key];
   } else if (TRANSLATIONS.en && TRANSLATIONS.en[key]) {
     result = TRANSLATIONS.en[key];
+  } else if (CLEAN_FALLBACKS[key]) {
+    result = CLEAN_FALLBACKS[key];
   } else {
     result = key;
   }

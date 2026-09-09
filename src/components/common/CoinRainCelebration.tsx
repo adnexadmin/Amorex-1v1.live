@@ -4,8 +4,11 @@ import { sound } from '../../utils/audio';
 import confetti from 'canvas-confetti';
 
 interface CoinRainCelebrationProps {
-  onCollect: (amount: number) => void;
-  onClose: () => void;
+  onCollect?: (amount: number) => void;
+  onClose?: () => void;
+  poolAmount?: number;
+  onClaimCoins?: (amount: number) => void;
+  onComplete?: () => void;
 }
 
 interface FallingCoin {
@@ -17,7 +20,22 @@ interface FallingCoin {
   value: number;
 }
 
-export const CoinRainCelebration: React.FC<CoinRainCelebrationProps> = ({ onCollect, onClose }) => {
+export const CoinRainCelebration: React.FC<CoinRainCelebrationProps> = ({
+  onCollect,
+  onClose,
+  poolAmount = 5000,
+  onClaimCoins,
+  onComplete
+}) => {
+  const handleFinished = () => {
+    onClose?.();
+    onComplete?.();
+  };
+
+  const handleCollectCoins = (amount: number) => {
+    onCollect?.(amount);
+    onClaimCoins?.(amount);
+  };
   const [coins, setCoins] = useState<FallingCoin[]>([]);
   const [totalCollected, setTotalCollected] = useState(0);
 
@@ -41,17 +59,17 @@ export const CoinRainCelebration: React.FC<CoinRainCelebrationProps> = ({ onColl
     setCoins(generated);
 
     const timer = setTimeout(() => {
-      onClose();
+      handleFinished();
     }, 8000);
 
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, []);
 
   const handleCatchCoin = (id: number, val: number) => {
     sound.playCoinDrop();
     setCoins((prev) => prev.map((c) => (c.id === id ? { ...c, collected: true } : c)));
     setTotalCollected((prev) => prev + val);
-    onCollect(val);
+    handleCollectCoins(val);
   };
 
   return (
@@ -74,7 +92,7 @@ export const CoinRainCelebration: React.FC<CoinRainCelebrationProps> = ({ onColl
           </p>
         </div>
         <button
-          onClick={onClose}
+          onClick={handleFinished}
           className="text-xs bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white px-2.5 py-1 rounded-lg"
         >
           Close

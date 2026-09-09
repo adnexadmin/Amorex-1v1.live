@@ -42,6 +42,8 @@ export interface UserProfile {
   faceVerified: boolean;
   level: number;
   experience: number;
+  exp?: number;
+  vip_level?: number;
   coins: number; // Talk-time coins
   gems: number; // Gift earnings
   vouchers: number; // 60-second video call vouchers
@@ -71,6 +73,25 @@ export interface UserProfile {
   timeSpentSeconds?: number;
   isRealUser?: boolean;
   registrationMethod?: 'email' | 'phone' | 'google' | 'guest';
+  username?: string;
+  isOnboarded?: boolean;
+  city?: string;
+  country?: string;
+  latitude?: number;
+  longitude?: number;
+  locationAccuracy?: number;
+}
+
+export interface UserLocationData {
+  userId: string;
+  username: string;
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  ipBased?: boolean;
+  updatedAt?: string;
 }
 
 export interface StreamHost {
@@ -136,6 +157,7 @@ export interface PartySeat {
 
 export interface PartyRoom {
   id: string;
+  displayId?: string;
   title: string;
   hostId: string;
   hostName: string;
@@ -149,7 +171,10 @@ export interface PartyRoom {
   bgmGenre: 'Pop' | 'RnB' | 'Rock' | 'Romantic' | 'LoFi';
   isLocked: boolean;
   onlineCount: number;
-  tag: string;
+  viewerCount?: number;
+  tag?: string;
+  tags?: string[];
+  region?: string;
 }
 
 export interface ChatMessage {
