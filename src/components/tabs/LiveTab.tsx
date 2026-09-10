@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { StreamHost, UserProfile, Gender, Region } from '../../types';
 import { sound } from '../../utils/audio';
 import {
@@ -7,24 +7,20 @@ import {
   PhoneCall,
   ChevronDown,
   Globe,
-  TrendingUp,
   Heart,
   Video,
   Languages,
-  ArrowUpDown,
-  Filter,
   Camera,
   Mic,
   MicOff,
   VideoOff,
   X,
   Lock,
-  Unlock,
-  KeyRound,
-  Users,
+  Search,
+  ShieldCheck,
   Eye,
   UserCheck,
-  UserX
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LiveStreamModal } from '../modals/LiveStreamModal';
@@ -63,8 +59,9 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   onMinimizeStreamToPiP
 }) => {
   const [subTab, setSubTab] = useState<'Popular' | 'New' | 'Follow'>('Popular');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const [targetGender, setTargetGender] = useState<'all' | Gender>('female');
+  const [targetGender, setTargetGender] = useState<'all' | Gender>('all');
   const [targetRegion, setTargetRegion] = useState<'All' | Region>('All');
   const [targetLanguage, setTargetLanguage] = useState<string>('All');
   const [languageMode, setLanguageMode] = useState<'filter' | 'sortFirst'>('filter');
@@ -91,12 +88,32 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   const [streamPasscode, setStreamPasscode] = useState<string>('');
   const [showPreLiveModal, setShowPreLiveModal] = useState<boolean>(false);
 
-  // Host Side: Incoming Viewer Requests Queue
+  // Viewer Requests Queue
   const [incomingWatchRequests, setIncomingWatchRequests] = useState<{ id: string; name: string; avatar: string }[]>([]);
-
-  // Viewer Side: Request to Watch Modal
   const [viewRequestHost, setViewRequestHost] = useState<StreamHost | null>(null);
   const [requestSentStatus, setRequestSentStatus] = useState<boolean>(false);
+
+  // Super Admin Default Host Object (ID: 1000001)
+  const superAdminHost: StreamHost = useMemo(() => ({
+    id: 'admin_1000001',
+    displayId: '1000001',
+    name: 'Adnex Super Admin',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+    coverImage: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600',
+    level: 99,
+    gender: 'female',
+    age: 24,
+    region: 'Global HQ',
+    isLive: true,
+    viewerCount: 9999,
+    coinRatePerMin: 60,
+    tags: ['SuperAdmin', 'OfficialSupport'],
+    bio: 'Official Amorex Super Admin & 24/7 Live Support Center',
+    followersCount: 50000,
+    likesCount: 100000,
+    languages: ['Malayalam', 'English', 'Hindi', 'Arabic'],
+    primaryLanguage: 'Malayalam'
+  }), []);
 
   const handleToggleFollow = (hostId: string) => {
     sound.playHeartLike();
@@ -131,20 +148,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
           localVideoRef.current.play().catch(console.error);
         }
       }, 200);
-
-      // Simulation: Simulated viewer asking to watch private stream
-      if (isPrivateStream) {
-        setTimeout(() => {
-          setIncomingWatchRequests([
-            {
-              id: 'viewer_99',
-              name: 'Arjun Verma',
-              avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
-            }
-          ]);
-          sound.playCoinDrop();
-        }, 6000);
-      }
     } catch (err) {
       console.warn('Camera access error:', err);
       setIsBroadcasting(true);
@@ -184,7 +187,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
     }
   };
 
-  // Host approves viewer request to watch
   const handleApproveViewer = (viewer: { id: string; name: string; avatar: string }) => {
     sound.playCoinDrop();
     setViewerCount((prev) => prev + 1);
@@ -196,7 +198,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
     setIncomingWatchRequests((prev) => prev.filter((v) => v.id !== viewerId));
   };
 
-  // Viewer clicks a host card
   const handleHostClick = (host: StreamHost) => {
     sound.playClick();
     if (host.isPrivate) {
@@ -207,11 +208,9 @@ export const LiveTab: React.FC<LiveTabProps> = ({
     }
   };
 
-  // Viewer sends watch request
   const handleSendWatchRequest = () => {
     sound.playClick();
     setRequestSentStatus(true);
-    // Simulate host approval after 3 seconds
     setTimeout(() => {
       sound.playCoinDrop();
       if (viewRequestHost) {
@@ -219,36 +218,40 @@ export const LiveTab: React.FC<LiveTabProps> = ({
         setViewRequestHost(null);
         setRequestSentStatus(false);
       }
-    }, 3000);
+    }, 2500);
   };
 
-  let filteredHosts = hosts.filter((host) => {
-    if (subTab === 'Popular' && !host.isPopular) return false;
-    if (subTab === 'New' && !host.isNew) return false;
-    if (subTab === 'Follow' && !followedHosts[host.id]) return false;
-    if (targetRegion !== 'All' && host.region !== targetRegion) return false;
-    if (targetGender !== 'all' && host.gender !== targetGender) return false;
-    if (languageMode === 'filter' && targetLanguage !== 'All' && !hostSpeaksLanguage(host, targetLanguage)) {
-      return false;
-    }
-    if (levelBadgeFilter === 'similar') {
-      const userLevel = user?.level ?? 1;
-      const levelDiff = Math.abs(host.level - userLevel);
-      if (levelDiff > 20) return false;
-    }
-    return true;
-  });
+  // Filter and Search Hosts
+  const filteredHosts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
 
-  filteredHosts = [...filteredHosts].sort((a, b) => {
-    if ((sortBy === 'language' || languageMode === 'sortFirst') && targetLanguage !== 'All') {
-      const aSpeaks = hostSpeaksLanguage(a, targetLanguage) ? 1 : 0;
-      const bSpeaks = hostSpeaksLanguage(b, targetLanguage) ? 1 : 0;
-      if (aSpeaks !== bSpeaks) return bSpeaks - aSpeaks;
+    let list = hosts.filter((host) => {
+      if (q) {
+        const matchesName = host.name.toLowerCase().includes(q);
+        const matchesId = host.displayId?.toString().includes(q) || host.id.toLowerCase().includes(q);
+        return matchesName || matchesId;
+      }
+      if (subTab === 'Popular' && !host.isPopular) return false;
+      if (subTab === 'New' && !host.isNew) return false;
+      if (subTab === 'Follow' && !followedHosts[host.id]) return false;
+      if (targetRegion !== 'All' && host.region !== targetRegion) return false;
+      if (targetGender !== 'all' && host.gender !== targetGender) return false;
+      if (languageMode === 'filter' && targetLanguage !== 'All' && !hostSpeaksLanguage(host, targetLanguage)) {
+        return false;
+      }
+      return true;
+    });
+
+    // If searching for Super Admin ID '1000001' or 'admin', prioritize Super Admin at index 0
+    if (q === '1000001' || q.includes('admin')) {
+      const alreadyHasAdmin = list.some((h) => h.displayId === '1000001' || h.id === 'admin_1000001');
+      if (!alreadyHasAdmin) {
+        list = [superAdminHost, ...list];
+      }
     }
-    if (sortBy === 'level') return b.level - a.level;
-    if (sortBy === 'newest') return (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0);
-    return b.viewerCount - a.viewerCount;
-  });
+
+    return list;
+  }, [hosts, searchQuery, subTab, followedHosts, targetRegion, targetGender, languageMode, targetLanguage, superAdminHost]);
 
   const handleStartRadarScan = () => {
     sound.playClick();
@@ -257,35 +260,51 @@ export const LiveTab: React.FC<LiveTabProps> = ({
 
     setTimeout(() => {
       sound.playHeartLike();
-      const eligible = hosts.filter(
-        (h) =>
-          (targetGender === 'all' || h.gender === targetGender) &&
-          h.isLive &&
-          (targetLanguage === 'All' || hostSpeaksLanguage(h, targetLanguage)) &&
-          (levelBadgeFilter === 'any' || Math.abs(h.level - (user?.level ?? 1)) <= 25)
-      );
-      const chosen = eligible.length > 0 ? eligible[Math.floor(Math.random() * eligible.length)] : hosts[0];
+      const eligible = filteredHosts.filter((h) => h.isLive);
+      const chosen = eligible.length > 0 ? eligible[Math.floor(Math.random() * eligible.length)] : superAdminHost;
 
       setRadarMatchedHost(chosen || null);
       setIsRadarScanning(false);
-    }, 2000);
+    }, 1800);
   };
 
   const followedCount = Object.values(followedHosts).filter(Boolean).length;
 
   return (
     <div className="pb-24 max-w-6xl mx-auto px-2.5 sm:px-6 flex flex-col gap-3 sm:gap-4">
-      {/* Top Navigation */}
-      <nav className="flex flex-col gap-2 px-1 sm:px-2 border-b border-white/10 bg-[#090A15]/85 backdrop-blur-md sticky top-12 sm:top-14 z-30 py-2 -mt-2">
+      {/* Top Sticky Navigation Bar with Direct Search */}
+      <nav className="flex flex-col gap-2.5 px-1 sm:px-2 border-b border-white/10 bg-[#090A15]/90 backdrop-blur-md sticky top-12 sm:top-14 z-30 py-2.5 -mt-2">
+        {/* Direct Search Bar for finding Users & Super Admin (1000001) */}
+        <div className="relative w-full flex items-center">
+          <Search size={14} className="absolute left-3.5 text-pink-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by ID (e.g. 1000001 for Super Admin) or Name..."
+            className="w-full bg-white/5 border border-white/15 focus:border-pink-500 rounded-full pl-9 pr-8 py-2 text-xs text-white placeholder-gray-400 focus:outline-none transition-all shadow-inner"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 text-gray-400 hover:text-white p-0.5 cursor-pointer"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* Sub-tabs & Go Live Button */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar whitespace-nowrap py-0.5">
             <button
               onClick={() => {
                 sound.playClick();
                 setSubTab('Popular');
+                setSearchQuery('');
               }}
               className={`px-3 py-1 rounded-full text-xs font-black tracking-wider transition-all uppercase shrink-0 cursor-pointer ${
-                subTab === 'Popular'
+                subTab === 'Popular' && !searchQuery
                   ? 'bg-gradient-to-r from-[#FF2E93] to-pink-600 text-white shadow-[0_0_10px_rgba(255,46,147,0.5)]'
                   : 'text-gray-400 hover:text-white bg-white/5'
               }`}
@@ -297,23 +316,25 @@ export const LiveTab: React.FC<LiveTabProps> = ({
               onClick={() => {
                 sound.playClick();
                 setSubTab('New');
+                setSearchQuery('');
               }}
               className={`px-3 py-1 rounded-full text-xs font-black tracking-wider transition-all uppercase shrink-0 cursor-pointer ${
-                subTab === 'New'
+                subTab === 'New' && !searchQuery
                   ? 'bg-gradient-to-r from-[#FF2E93] to-pink-600 text-white shadow-[0_0_10px_rgba(255,46,147,0.5)]'
                   : 'text-gray-400 hover:text-white bg-white/5'
               }`}
             >
-              NEW TO POPULAR
+              NEW
             </button>
 
             <button
               onClick={() => {
                 sound.playClick();
                 setSubTab('Follow');
+                setSearchQuery('');
               }}
               className={`px-3 py-1 rounded-full text-xs font-black tracking-wider transition-all uppercase shrink-0 cursor-pointer ${
-                subTab === 'Follow'
+                subTab === 'Follow' && !searchQuery
                   ? 'bg-gradient-to-r from-[#FF2E93] to-pink-600 text-white shadow-[0_0_10px_rgba(255,46,147,0.5)]'
                   : 'text-gray-400 hover:text-white bg-white/5'
               }`}
@@ -371,11 +392,11 @@ export const LiveTab: React.FC<LiveTabProps> = ({
             <div className="text-[#00D2FF] font-black text-xs sm:text-base tracking-wide uppercase flex items-center gap-1.5">
               <span>1v1 Matching Radar</span>
               <span className="text-[9px] bg-pink-500/20 text-pink-300 font-bold px-1.5 py-0.2 rounded-full border border-pink-500/30">
-                AI Match
+                AI Direct
               </span>
             </div>
             <div className="text-white/60 text-[11px] font-medium mt-0.5">
-              Connect in 60s • 100% Free Video Match
+              Connect to verified host or Super Admin directly
             </div>
           </div>
         </div>
@@ -414,7 +435,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                 />
                 <div>
                   <span className="font-bold text-white text-xs sm:text-sm">{radarMatchedHost.name}</span>
-                  <span className="text-[10px] text-white/60 block">Match in {radarMatchedHost.region}! 💘</span>
+                  <span className="text-[10px] text-pink-300 block">ID: {radarMatchedHost.displayId} • Direct Match</span>
                 </div>
               </div>
 
@@ -446,23 +467,23 @@ export const LiveTab: React.FC<LiveTabProps> = ({
       {filteredHosts.length === 0 ? (
         <div className="glass rounded-3xl p-8 text-center flex flex-col items-center justify-center my-6 border border-white/10">
           <div className="w-16 h-16 rounded-full bg-pink-500/15 flex items-center justify-center text-3xl mb-3">
-            📹
+            🔍
           </div>
-          <h3 className="text-white font-bold text-base mb-1">No Hosts Streaming</h3>
+          <h3 className="text-white font-bold text-base mb-1">No Profiles Found</h3>
           <p className="text-gray-400 text-xs max-w-sm mb-4">
-            Be the first star! Tap <strong>GO LIVE</strong> above to launch your private or public video stream.
+            Search <strong>1000001</strong> to reach Super Admin directly or clear search to browse live hosts.
           </p>
           <button
-            onClick={() => setShowPreLiveModal(true)}
-            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-red-500 via-[#FF2E93] to-purple-600 text-white font-bold text-xs shadow-lg hover:scale-105 transition-transform cursor-pointer"
+            onClick={() => setSearchQuery('1000001')}
+            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E93] to-purple-600 text-white font-bold text-xs shadow-lg hover:scale-105 transition-transform cursor-pointer"
           >
-            Start Your Live Stream Now
+            Connect to Super Admin (1000001)
           </button>
         </div>
       ) : (
         <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 px-0.5 sm:px-0">
           {filteredHosts.map((host, idx) => {
-            const isPinkNeon = idx % 2 === 0;
+            const isSuperAdmin = host.displayId === '1000001' || host.id === 'admin_1000001';
             const isFollowed = followedHosts[host.id];
 
             return (
@@ -471,24 +492,36 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                 whileHover={{ y: -3 }}
                 onClick={() => handleHostClick(host)}
                 className={`relative rounded-2xl sm:rounded-3xl overflow-hidden glass h-56 sm:h-72 group transition-all cursor-pointer ${
-                  isPinkNeon ? 'border-pink-500/30 hover:border-pink-500/70' : 'border-white/10 hover:border-[#00D2FF]/50'
+                  isSuperAdmin
+                    ? 'border-2 border-amber-400 shadow-[0_0_25px_rgba(251,191,36,0.35)]'
+                    : idx % 2 === 0
+                    ? 'border-pink-500/30 hover:border-pink-500/70'
+                    : 'border-white/10 hover:border-[#00D2FF]/50'
                 }`}
               >
                 <img
                   referrerPolicy="no-referrer"
-                  src={host.coverImage}
+                  src={host.coverImage || host.avatar}
                   alt={host.name}
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#090A15] via-black/30 to-transparent opacity-90" />
 
+                {/* Status Badges */}
                 <div className="absolute top-2 left-2 flex items-center gap-1 z-10">
-                  <div className="bg-[#FF2E93] text-white text-[9px] px-1.5 py-0.5 rounded-md font-extrabold flex items-center gap-1 shadow-sm">
-                    <span className="w-1 h-1 bg-white rounded-full animate-ping" />
-                    <span>LIVE</span>
-                  </div>
+                  {isSuperAdmin ? (
+                    <div className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] px-2 py-0.5 rounded-md font-black flex items-center gap-1 shadow-md">
+                      <ShieldCheck size={11} />
+                      <span>SUPER ADMIN</span>
+                    </div>
+                  ) : (
+                    <div className="bg-[#FF2E93] text-white text-[9px] px-1.5 py-0.5 rounded-md font-extrabold flex items-center gap-1 shadow-sm">
+                      <span className="w-1 h-1 bg-white rounded-full animate-ping" />
+                      <span>LIVE</span>
+                    </div>
+                  )}
 
-                  {host.isPrivate && (
+                  {host.isPrivate && !isSuperAdmin && (
                     <div className="bg-amber-500/90 text-black text-[9px] px-1.5 py-0.5 rounded-md font-black flex items-center gap-1 shadow-sm">
                       <Lock size={9} />
                       <span>PRIVATE</span>
@@ -513,10 +546,13 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                 <div className="absolute bottom-2.5 left-2.5 right-2.5 z-10 space-y-1">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 pr-1">
-                      <h3 className="text-white font-extrabold text-xs sm:text-sm group-hover:text-pink-300 transition-colors truncate">
-                        {host.name}
+                      <h3 className="text-white font-extrabold text-xs sm:text-sm group-hover:text-pink-300 transition-colors truncate flex items-center gap-1">
+                        <span>{host.name}</span>
+                        {isSuperAdmin && <ShieldCheck size={12} className="text-amber-400 shrink-0" />}
                       </h3>
-                      <p className="text-[10px] text-white/70 truncate">{host.region} • {host.age}y</p>
+                      <p className="text-[10px] text-pink-300 font-mono truncate">
+                        ID: {host.displayId} • {host.region}
+                      </p>
                     </div>
 
                     <button
@@ -550,7 +586,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
             >
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
                 <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Radio size={16} className="text-pink-500" /> Live Stream Privacy Setup
+                  <Radio size={16} className="text-pink-500" /> Live Stream Setup
                 </h4>
                 <button onClick={() => setShowPreLiveModal(false)} className="text-gray-400 hover:text-white">
                   <X size={16} />
@@ -560,8 +596,8 @@ export const LiveTab: React.FC<LiveTabProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10">
                   <div>
-                    <span className="text-xs font-bold block text-white">Private Host-User Stream</span>
-                    <span className="text-[10px] text-gray-400">Viewers must request and be accepted by you</span>
+                    <span className="text-xs font-bold block text-white">Private Host Stream</span>
+                    <span className="text-[10px] text-gray-400">Viewers must request access to watch</span>
                   </div>
                   <button
                     type="button"
@@ -578,26 +614,11 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                   </button>
                 </div>
 
-                {isPrivateStream && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-pink-300">Co-Host Keycode (For your guest):</label>
-                    <input
-                      type="text"
-                      maxLength={4}
-                      value={streamPasscode}
-                      onChange={(e) => setStreamPasscode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="e.g. 1234"
-                      className="w-full text-center tracking-[0.5em] font-mono font-black text-lg bg-[#090A15] border border-pink-500/60 rounded-xl py-2 text-white focus:outline-none"
-                    />
-                    <span className="text-[10px] text-gray-400 block text-center">Your co-host enters this code to join talk</span>
-                  </div>
-                )}
-
                 <button
                   onClick={handleConfirmStartBroadcast}
                   className="w-full py-3 rounded-2xl bg-gradient-to-r from-red-500 via-[#FF2E93] to-purple-600 text-white font-black text-xs uppercase tracking-wider shadow-lg hover:scale-102 transition-transform cursor-pointer"
                 >
-                  Launch Live Studio 🚀
+                  Launch Studio 🚀
                 </button>
               </div>
             </motion.div>
@@ -621,7 +642,7 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                 </div>
                 <h4 className="text-sm font-black text-white">{viewRequestHost.name}'s Private Live</h4>
                 <p className="text-xs text-gray-300">
-                  This host is having a private session. Request permission to watch this stream. (No coins required)
+                  Request permission to watch this private session.
                 </p>
               </div>
 
@@ -629,7 +650,6 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                 <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 text-center space-y-2">
                   <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
                   <p className="text-xs font-bold text-cyan-300">Request Sent to Host!</p>
-                  <p className="text-[11px] text-gray-400">Waiting for {viewRequestHost.name} to accept your entry...</p>
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -664,26 +684,20 @@ export const LiveTab: React.FC<LiveTabProps> = ({
               exit={{ scale: 0.9, opacity: 0 }}
               className="w-full max-w-lg h-[90vh] bg-[#0d0f1f] border border-pink-500/40 rounded-3xl overflow-hidden flex flex-col relative shadow-[0_0_50px_rgba(255,46,147,0.3)]"
             >
-              {/* Studio Header */}
               <div className="p-3 bg-black/60 border-b border-white/10 flex items-center justify-between z-20">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-full border border-pink-500 overflow-hidden">
                     <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-black text-white leading-tight">{user.name} 👑</h4>
+                    <h4 className="text-xs font-black text-white leading-tight">{user.name}</h4>
                     <span className="text-[9px] text-red-400 font-bold flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" /> LIVE
-                      {isPrivateStream && <span className="text-amber-300 ml-1">🔒 PRIVATE (Approval Required)</span>}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 text-xs font-bold text-amber-300">
-                    <Eye size={12} />
-                    <span>{viewerCount} Watching</span>
-                  </div>
                   <button
                     onClick={handleStopBroadcast}
                     className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
@@ -693,86 +707,32 @@ export const LiveTab: React.FC<LiveTabProps> = ({
                 </div>
               </div>
 
-              {/* Video Area */}
-              <div className="flex-1 relative bg-black flex flex-col sm:flex-row items-center justify-center overflow-hidden">
-                <div className={`relative w-full ${activeCoHost ? 'h-1/2 sm:h-full sm:w-1/2' : 'h-full'} flex items-center justify-center bg-[#090A15]`}>
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                  {!isCameraActive && (
-                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center text-gray-400 text-xs">
-                      Camera Off
-                    </div>
-                  )}
-                  <span className="absolute bottom-2 left-2 text-[10px] bg-black/60 px-2 py-0.5 rounded text-white font-bold">
-                    {user.name} (Host)
-                  </span>
-                </div>
-
-                {activeCoHost && (
-                  <div className="relative w-full h-1/2 sm:h-full sm:w-1/2 flex items-center justify-center bg-gray-900 border-t sm:border-t-0 sm:border-l border-pink-500/40">
-                    <img
-                      src={activeCoHost.avatar}
-                      alt={activeCoHost.name}
-                      className="w-full h-full object-cover"
-                    />
-                    <span className="absolute bottom-2 left-2 text-[10px] bg-black/60 px-2 py-0.5 rounded text-cyan-300 font-bold">
-                      {activeCoHost.name} (User Co-Host)
-                    </span>
-                    <button
-                      onClick={() => setActiveCoHost(null)}
-                      className="absolute top-2 right-2 bg-red-600/80 text-white p-1 rounded-full text-xs"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                )}
-
-                {/* INCOMING VIEWER WATCH REQUEST ALERT FOR HOST */}
-                {incomingWatchRequests.length > 0 && (
-                  <div className="absolute top-4 inset-x-4 z-30 p-3 rounded-2xl bg-black/90 border border-cyan-400/80 shadow-[0_0_20px_rgba(0,210,255,0.4)] flex items-center justify-between animate-bounce">
-                    <div className="flex items-center gap-2.5">
-                      <img src={incomingWatchRequests[0].avatar} alt="" className="w-8 h-8 rounded-full object-cover border border-cyan-400" />
-                      <div>
-                        <span className="text-xs font-bold text-white block">{incomingWatchRequests[0].name}</span>
-                        <span className="text-[10px] text-cyan-300">Wants to enter & watch your private stream</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <button
-                        onClick={() => handleRejectViewer(incomingWatchRequests[0].id)}
-                        className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-300 rounded-lg text-xs font-bold cursor-pointer"
-                      >
-                        Decline
-                      </button>
-                      <button
-                        onClick={() => handleApproveViewer(incomingWatchRequests[0])}
-                        className="px-3 py-1 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-bold rounded-lg text-xs shadow-md cursor-pointer flex items-center gap-1"
-                      >
-                        <UserCheck size={12} />
-                        <span>Allow Entry</span>
-                      </button>
-                    </div>
+              <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                {!isCameraActive && (
+                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center text-gray-400 text-xs">
+                    Camera Off
                   </div>
                 )}
               </div>
 
-              {/* Broadcast Bottom Bar */}
               <div className="p-3.5 bg-black/70 border-t border-white/10 flex items-center justify-around z-20">
                 <button
                   onClick={toggleCamera}
-                  className={`p-3 rounded-full ${isCameraActive ? 'bg-white/10 text-white' : 'bg-red-600 text-white'}`}
+                  className={`p-3 rounded-full cursor-pointer ${isCameraActive ? 'bg-white/10 text-white' : 'bg-red-600 text-white'}`}
                 >
                   {isCameraActive ? <Camera size={18} /> : <VideoOff size={18} />}
                 </button>
 
                 <button
                   onClick={toggleMic}
-                  className={`p-3 rounded-full ${isMicActive ? 'bg-white/10 text-white' : 'bg-red-600 text-white'}`}
+                  className={`p-3 rounded-full cursor-pointer ${isMicActive ? 'bg-white/10 text-white' : 'bg-red-600 text-white'}`}
                 >
                   {isMicActive ? <Mic size={18} /> : <MicOff size={18} />}
                 </button>
