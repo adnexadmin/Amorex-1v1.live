@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StreamHost, UserProfile } from '../../types';
 import { sound } from '../../utils/audio';
 import {
@@ -8,11 +8,13 @@ import {
   Video,
   ShieldCheck,
   Minimize2,
-  Sparkles,
   Users,
   Palette,
   Check,
-  UserPlus
+  UserPlus,
+  Volume2,
+  VolumeX,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
@@ -71,16 +73,15 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
   const [selectedTheme, setSelectedTheme] = useState<RoomTheme>('rose');
   const [showThemePicker, setShowThemePicker] = useState<boolean>(false);
   const [streamComments, setStreamComments] = useState<Array<{ id: string; user: string; level: number; text: string; isGift?: boolean }>>([
-    { id: '1', user: 'Layla_Fan', level: 18, text: 'Welcome to the romantic stage! 💖' },
-    { id: '2', user: 'DubaiPrince', level: 42, text: 'Sent 10x Passion Roses 🌹🌹', isGift: true },
-    { id: '3', user: 'Aanya_Lover', level: 12, text: 'Voice is so angelic tonight ✨' },
-    { id: '4', user: 'CrownKing', level: 35, text: 'Joined VIP front row seat 🔥' }
+    { id: 'welcome', user: host.name, level: host.level || 1, text: `Welcome to my live stream! Say hello in the chat 👋` }
   ]);
   const [commentInput, setCommentInput] = useState<string>('');
   const [floatingHearts, setFloatingHearts] = useState<Array<{ id: number; x: number }>>([]);
   const [selectedProfile, setSelectedProfile] = useState<StreamHost | UserProfile | null>(null);
+  const [isAudioMuted, setIsAudioMuted] = useState<boolean>(false);
 
-  // Generate deterministic 8-digit Host ID (e.g., 84920193)
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
   const hostId8Digit = React.useMemo(() => {
     let hash = 0;
     for (let i = 0; i < host.id.length; i++) {
@@ -98,7 +99,7 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
       {
         id: Date.now().toString(),
         user: user.name,
-        level: user.level || 2,
+        level: user.level || 1,
         text: commentInput.trim()
       }
     ]);
@@ -125,22 +126,32 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
           boxShadow: `0 0 40px ${ROOM_THEMES[selectedTheme].glowColor}`
         }}
       >
-        {/* Top Header Bar */}
+        {/* Stream Area */}
         <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-          {/* Host Cover Image / Stream Background */}
-          <img
-            referrerPolicy="no-referrer"
-            src={host.coverImage}
-            alt={host.name}
-            className="w-full h-full object-cover opacity-85 scale-105"
-          />
+          {/* Live Video / Video Feed */}
+          {host.videoUrl ? (
+            <video
+              ref={remoteVideoRef}
+              src={host.videoUrl}
+              autoPlay
+              playsInline
+              loop
+              muted={isAudioMuted}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <img
+              referrerPolicy="no-referrer"
+              src={host.coverImage || host.avatar}
+              alt={host.name}
+              className="w-full h-full object-cover opacity-85 scale-105"
+            />
+          )}
 
           {/* Dynamic Theme Gradient Overlay */}
-          <div
-            className={`absolute inset-0 bg-gradient-to-t ${ROOM_THEMES[selectedTheme].bgGradient}`}
-          />
+          <div className={`absolute inset-0 bg-gradient-to-t ${ROOM_THEMES[selectedTheme].bgGradient} pointer-events-none opacity-60`} />
 
-          {/* Floating Reaction Hearts Canvas */}
+          {/* Floating Reaction Hearts */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
             {floatingHearts.map((h) => (
               <motion.div
@@ -155,12 +166,11 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
             ))}
           </div>
 
-          {/* 1. TOP HEADER: Host Avatar with Rotating VIP Level Frame, Nickname, 8-Digit ID, Audience Count, + Follow */}
+          {/* TOP HEADER: Host Identity & Room Status */}
           <div
             className="absolute left-3 right-3 flex items-center justify-between z-30"
             style={{ top: 'max(0.75rem, env(safe-area-inset-top, 0px))' }}
           >
-            {/* Host Identity Card (Click to open Profile Modal) */}
             <div
               id="stream-host-profile-card"
               onClick={() => {
@@ -168,45 +178,39 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
                 setSelectedProfile(host);
               }}
               className="flex items-center gap-2 bg-[#090A15]/80 hover:bg-[#151833] backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/15 hover:border-pink-500/50 shadow-lg cursor-pointer transition-all active:scale-95"
-              title="View Host Profile"
             >
-              {/* Avatar with Rotating VIP Frame */}
               <div className="relative">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
-                  className="w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-[#FFD700] via-[#FF2E93] to-[#00D2FF]"
-                >
+                <div className="w-9 h-9 rounded-full p-[2px] bg-gradient-to-tr from-[#FFD700] via-[#FF2E93] to-[#00D2FF]">
                   <img
                     referrerPolicy="no-referrer"
                     src={host.avatar}
                     alt={host.name}
                     className="w-full h-full rounded-full object-cover border border-[#090A15]"
                   />
-                </motion.div>
-                <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-[#FFD700] text-black px-1 rounded-full shadow-xs">
-                  Lv.{host.level}
+                </div>
+                <span className="absolute -bottom-1 -right-0.5 text-[8px] font-black bg-[#FFD700] text-black px-1 rounded-full">
+                  Lv.{host.level || 1}
                 </span>
               </div>
 
-              {/* Host Details */}
               <div className="flex flex-col pr-1">
                 <div className="flex items-center gap-1.5">
                   <h4 className="text-xs font-extrabold text-white leading-tight truncate max-w-[100px] sm:max-w-[130px]">
                     {host.name}
                   </h4>
-                  <span className="text-[9px] text-gray-400 font-mono">
-                    ID: {hostId8Digit}
-                  </span>
+                  {host.isPrivate && (
+                    <span className="text-[8px] bg-amber-500/90 text-black px-1 rounded font-black flex items-center gap-0.5">
+                      <Lock size={8} /> PVT
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 text-[10px] text-pink-300">
                   <span className="flex items-center gap-0.5 text-cyan-300 font-bold">
-                    <Users size={10} /> {(host?.viewerCount ?? 0).toLocaleString()} Viewers
+                    <Users size={10} /> {(host?.viewerCount ?? 1).toLocaleString()} Watching
                   </span>
                 </div>
               </div>
 
-              {/* + Follow Button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -217,7 +221,7 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
                 className={`ml-1 px-2.5 py-1 rounded-full text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer ${
                   isFollowed
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50'
-                    : 'bg-gradient-to-r from-[#FF2E93] to-pink-600 text-white shadow-[0_0_10px_rgba(255,46,147,0.6)] hover:scale-105'
+                    : 'bg-gradient-to-r from-[#FF2E93] to-pink-600 text-white shadow-md hover:scale-105'
                 }`}
               >
                 {isFollowed ? (
@@ -234,88 +238,88 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
               </button>
             </div>
 
-            {/* Top Right Controls: Theme Picker, PiP, Close */}
+            {/* Top Right Controls */}
             <div className="flex items-center gap-1.5">
-              {/* Broadcaster Room Themes Selector */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowThemePicker((prev) => !prev)}
-                  title="Switch Room Theme Wallpaper"
-                  className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-amber-300 flex items-center justify-center border border-white/10 transition-colors"
-                >
-                  <Palette size={14} />
-                </button>
+              <button
+                onClick={() => setIsAudioMuted(!isAudioMuted)}
+                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center border border-white/10"
+              >
+                {isAudioMuted ? <VolumeX size={14} className="text-red-400" /> : <Volume2 size={14} className="text-emerald-400" />}
+              </button>
 
-                {/* Theme Selector Popover */}
-                <AnimatePresence>
-                  {showThemePicker && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="absolute right-0 top-10 z-40 bg-[#14162B] border border-pink-500/30 rounded-2xl p-2.5 shadow-2xl w-44 space-y-1.5 backdrop-blur-xl"
-                    >
-                      <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider px-1">
-                        Room Theme Wallpaper
-                      </p>
-                      {(Object.keys(ROOM_THEMES) as RoomTheme[]).map((key) => {
-                        const t = ROOM_THEMES[key];
-                        return (
-                          <button
-                            key={key}
-                            onClick={() => {
-                              sound.playClick();
-                              setSelectedTheme(key);
-                              setShowThemePicker(false);
-                            }}
-                            className={`w-full text-left px-2 py-1.5 rounded-xl text-xs flex items-center justify-between transition-all ${
-                              selectedTheme === key
-                                ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold'
-                                : 'text-gray-300 hover:bg-white/5'
-                            }`}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <span>{t.icon}</span>
-                              <span>{t.name}</span>
-                            </span>
-                            {selectedTheme === key && <Check size={12} className="text-pink-400" />}
-                          </button>
-                        );
-                      })}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              <button
+                onClick={() => setShowThemePicker((prev) => !prev)}
+                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-amber-300 flex items-center justify-center border border-white/10 transition-colors"
+              >
+                <Palette size={14} />
+              </button>
 
-              {/* PiP Minimize */}
               <button
                 onClick={() => {
                   sound.playClick();
                   onMinimizeToPiP?.(host);
                   onClose();
                 }}
-                title="Minimize to Floating PiP Player"
-                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-gray-300 hover:text-white flex items-center justify-center border border-white/10 transition-colors"
+                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-gray-300 hover:text-white flex items-center justify-center border border-white/10"
               >
                 <Minimize2 size={15} />
               </button>
 
-              {/* Close Modal */}
               <button
                 onClick={onClose}
-                className="w-8 h-8 rounded-full bg-black/60 hover:bg-red-600 text-gray-300 hover:text-white flex items-center justify-center border border-white/10 transition-colors"
+                className="w-8 h-8 rounded-full bg-black/60 hover:bg-red-600 text-gray-300 hover:text-white flex items-center justify-center border border-white/10"
               >
                 <X size={16} />
               </button>
             </div>
           </div>
 
-          {/* 2. PINNED SAFETY NOTICE BANNER */}
+          {/* Theme Selector Popover */}
+          <AnimatePresence>
+            {showThemePicker && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute right-3 top-14 z-40 bg-[#14162B] border border-pink-500/30 rounded-2xl p-2.5 shadow-2xl w-44 space-y-1.5 backdrop-blur-xl"
+              >
+                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider px-1">
+                  Wallpaper Theme
+                </p>
+                {(Object.keys(ROOM_THEMES) as RoomTheme[]).map((key) => {
+                  const t = ROOM_THEMES[key];
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        sound.playClick();
+                        setSelectedTheme(key);
+                        setShowThemePicker(false);
+                      }}
+                      className={`w-full text-left px-2 py-1.5 rounded-xl text-xs flex items-center justify-between transition-all ${
+                        selectedTheme === key
+                          ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40 font-bold'
+                          : 'text-gray-300 hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span>{t.icon}</span>
+                        <span>{t.name}</span>
+                      </span>
+                      {selectedTheme === key && <Check size={12} className="text-pink-400" />}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Safety Notice */}
           <div className="absolute top-16 left-3 right-3 z-20">
             <div className="bg-black/50 backdrop-blur-md rounded-xl px-3 py-1.5 border border-cyan-400/30 flex items-center justify-between text-[10px] text-cyan-200 shadow-md">
               <div className="flex items-center gap-1.5 font-medium">
                 <ShieldCheck size={13} className="text-[#00D2FF] shrink-0" />
-                <span className="truncate">Welcome to Amorex Live Room! AI system reviews 24/7.</span>
+                <span className="truncate">Live Stream Moderated 24/7. Keep chat friendly!</span>
               </div>
               <span className="text-[9px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.5 rounded border border-cyan-500/30 shrink-0 ml-1">
                 Verified
@@ -323,29 +327,16 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
             </div>
           </div>
 
-          {/* Stream Live Comments Overlay (Bottom-Left) */}
+          {/* Live Comments Overlay */}
           <div className="absolute bottom-20 left-3 right-3 space-y-1.5 max-h-48 overflow-y-auto no-scrollbar z-20 pointer-events-auto">
             {streamComments.map((c) => (
               <div
                 key={c.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sound.playClick();
-                  setSelectedProfile({
-                    id: `user_${c.id}`,
-                    name: c.user,
-                    level: c.level,
-                    displayId: `782${c.level}912`,
-                    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-                    role: 'user'
-                  } as any);
-                }}
-                className={`backdrop-blur-md rounded-xl px-3 py-1 text-xs w-fit max-w-[88%] border transition-all cursor-pointer hover:border-pink-400/50 active:scale-98 ${
+                className={`backdrop-blur-md rounded-xl px-3 py-1 text-xs w-fit max-w-[88%] border ${
                   c.isGift
-                    ? 'bg-gradient-to-r from-amber-500/30 to-[#FF2E93]/30 border-amber-400/40 text-amber-200 font-bold shadow-[0_0_10px_rgba(255,215,0,0.3)]'
+                    ? 'bg-gradient-to-r from-amber-500/30 to-[#FF2E93]/30 border-amber-400/40 text-amber-200 font-bold'
                     : 'bg-black/60 border-white/10 text-white/95'
                 }`}
-                title="Tap to view commenter profile"
               >
                 <span className="text-[9px] font-black bg-gradient-to-r from-amber-400 to-orange-500 text-black px-1 py-0.2 rounded-sm mr-1.5">
                   Lv.{c.level}
@@ -356,32 +347,30 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
             ))}
           </div>
 
-          {/* Floating Fast Heart Tap Button on Right */}
+          {/* Floating Heart Tap Button */}
           <button
             onClick={handleHeartBurst}
             className="absolute bottom-20 right-3 z-30 w-11 h-11 rounded-full bg-gradient-to-tr from-[#FF2E93] to-pink-500 text-white flex items-center justify-center shadow-[0_0_20px_rgba(255,46,147,0.7)] hover:scale-110 active:scale-90 transition-transform cursor-pointer"
-            title="Send Heart Burst"
           >
             <Heart size={20} fill="currentColor" />
           </button>
         </div>
 
-        {/* 3. IN-ROOM ACTIONS & BOTTOM COMMENT BAR */}
+        {/* BOTTOM ACTION & COMMENT BAR */}
         <div className="p-3 bg-[#14162B] border-t border-white/10 flex items-center gap-2 z-30">
-          {/* Lucky Gifts Drawer Trigger */}
           <button
             id="stream-lucky-gifts-btn"
             onClick={() => {
               sound.playClick();
               onOpenGiftDrawer(host.name);
             }}
-            className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-orange-500 to-[#FF2E93] text-white flex items-center justify-center text-lg shadow-[0_0_15px_rgba(255,215,0,0.5)] hover:scale-110 transition-transform shrink-0 cursor-pointer"
-            title="Send Lucky Gifts (x1, x17, x37, x77)"
+            className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-orange-500 to-[#FF2E93] text-white flex items-center justify-center text-lg shadow-md hover:scale-110 transition-transform shrink-0 cursor-pointer"
+            title="Send Gift"
           >
             🎁
           </button>
 
-          {/* Prominent "Call me 📹" Button for Private WebRTC 1v1 Call */}
+          {/* 1v1 Video Call Button */}
           <button
             id="stream-call-me-btn"
             onClick={() => {
@@ -389,19 +378,19 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
               onStart1v1Call(host);
               onClose();
             }}
-            className="px-3.5 py-2 rounded-full bg-gradient-to-r from-[#FF2E93] via-[#9D00FF] to-[#00D2FF] text-white font-black text-xs flex items-center gap-1.5 shrink-0 shadow-[0_0_15px_rgba(255,46,147,0.5)] hover:scale-105 transition-all cursor-pointer"
+            className="px-3.5 py-2 rounded-full bg-gradient-to-r from-[#FF2E93] via-[#9D00FF] to-[#00D2FF] text-white font-black text-xs flex items-center gap-1.5 shrink-0 shadow-md hover:scale-105 transition-all cursor-pointer"
           >
             <Video size={14} className="animate-pulse" />
-            <span>Call me 📹</span>
+            <span>Call 1v1</span>
           </button>
 
-          {/* Comment Form */}
+          {/* Comment Input */}
           <form onSubmit={handleSendComment} className="flex-1 flex items-center gap-1.5">
             <input
               type="text"
               value={commentInput}
               onChange={(e) => setCommentInput(e.target.value)}
-              placeholder="Say something nice..."
+              placeholder="Send message to host..."
               className="w-full bg-[#090A15] border border-white/15 focus:border-pink-500 rounded-full px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none"
             />
             <button
@@ -414,7 +403,7 @@ export const LiveStreamModal: React.FC<LiveStreamModalProps> = ({
         </div>
       </motion.div>
 
-      {/* In-Stream User Profile Modal with Prominent 'Back' Button & router.back() */}
+      {/* User Profile Modal */}
       <AnimatePresence>
         {selectedProfile && (
           <LiveUserProfileModal
