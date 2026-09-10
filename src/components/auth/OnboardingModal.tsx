@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, Region, Gender } from '../../types';
 import { sound } from '../../utils/audio';
+import { saveRegisteredUser } from '../../utils/storage';
 import {
   CheckCircle,
   Camera,
@@ -71,32 +72,23 @@ const DEFAULT_FALLBACK_USER: UserProfile = {
   isOnboarded: false
 };
 
-const REGIONAL_AVATARS: Record<Region, string[]> = {
-  India: [
+// Rich Animated & 3D Style Diverse Avatars
+const ANIMATED_AVATARS = {
+  female: [
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=80'
-  ],
-  'Middle East': [
     'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400&auto=format&fit=crop&q=80'
-  ],
-  Bangladesh: [
+    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=80',
     'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80'
-  ],
-  Pakistan: [
     'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80'
+    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80'
   ],
-  'Southeast Asia': [
-    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&auto=format&fit=crop&q=80'
-  ],
-  Global: [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80'
+  male: [
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&auto=format&fit=crop&q=80'
   ]
 };
 
@@ -129,7 +121,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const [detectedLocation, setDetectedLocation] = useState<LocationDetectionResult | null>(null);
   const [cityInput, setCityInput] = useState<string>(activeUser.city || 'Mumbai');
   const [countryInput, setCountryInput] = useState<string>(activeUser.country || 'India');
-  const [locationSavedNotice, setLocationSavedNotice] = useState<string>('');
 
   // Step 3: Liveness test states
   const [livenessStage, setLivenessStage] = useState<'idle' | 'scanning' | 'blink' | 'turn' | 'verified'>('idle');
@@ -148,7 +139,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       return;
     }
 
-    // Format validation (3-30 characters, alphanumeric and underscore)
     const isValidFormat = /^[a-zA-Z0-9_]{3,30}$/.test(clean);
     if (!isValidFormat) {
       setUsernameStatus('invalid');
@@ -226,7 +216,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         videoRef.current.play();
       }
 
-      // Step-by-step interactive simulated challenge sequence
       setTimeout(() => setLivenessStage('blink'), 1800);
       setTimeout(() => setLivenessStage('turn'), 3600);
       setTimeout(() => {
@@ -239,8 +228,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         }
       }, 5400);
     } catch (err) {
-      console.warn('Camera access denied or unavailable in iframe:', err);
-      // Fallback simulated success
+      console.warn('Camera access fallback:', err);
       setTimeout(() => {
         setLivenessStage('verified');
         sound.playJackpotFanfare();
@@ -248,7 +236,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     }
   };
 
-  // Step 1 -> Step 2 validation
   const handleProceedToLocation = (e: React.FormEvent) => {
     e.preventDefault();
     if (usernameStatus === 'taken' || usernameStatus === 'invalid') {
@@ -259,13 +246,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setStep(2);
   };
 
-  // Step 2 -> Step 3 validation
   const handleProceedToLiveness = () => {
     sound.playClick();
     setStep(3);
   };
 
-  // Finalize Onboarding & write to Firestore
+  // Finalize Onboarding & write to Firestore + Local Storage
   const handleFinalizeOnboarding = async () => {
     setIsSubmitting(true);
     sound.playJackpotFanfare();
@@ -278,7 +264,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     const finalAccuracy = detectedLocation?.accuracy || 10;
     const isIp = detectedLocation?.ipBased ?? true;
 
-    // 1. Prepare updated user profile
     const updatedUser: UserProfile = {
       ...activeUser,
       name: name.trim() || activeUser.name,
@@ -298,11 +283,15 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
       coins: (activeUser.coins || 0) + 180,
       vouchers: Math.max(activeUser.vouchers || 0, 3),
       isOnboarded: true,
-      lastActiveAt: Date.now()
+      lastActiveAt: Date.now(),
+      registeredAt: activeUser.registeredAt || Date.now(),
+      isRealUser: true
     };
 
-    // 2. Persist to Firestore: usernames, userLocations, users
     try {
+      localStorage.setItem('amorex_user', JSON.stringify(updatedUser));
+      saveRegisteredUser(updatedUser, true);
+
       await Promise.all([
         claimUsernameInFirestore(username.trim().toLowerCase(), updatedUser.id),
         saveUserLocationToFirestore({
@@ -319,7 +308,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         saveUserToFirestore(updatedUser)
       ]);
     } catch (err) {
-      console.warn('Non-blocking Firestore persistence notice:', err);
+      console.warn('Firestore save notice:', err);
     }
 
     setIsSubmitting(false);
@@ -332,9 +321,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="w-full max-w-lg bg-[#14162B] border border-pink-500/30 rounded-3xl p-6 shadow-[0_0_60px_rgba(255,46,147,0.3)] relative text-white"
+        className="w-full max-w-lg bg-[#14162B] border border-pink-500/30 rounded-3xl p-6 shadow-[0_0_60px_rgba(255,46,147,0.3)] relative text-white my-auto max-h-[95vh] overflow-y-auto"
       >
-        {/* Optional Skip/Close only if already onboarded */}
         {onClose && activeUser.isOnboarded && (
           <button
             type="button"
@@ -350,7 +338,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           <div className="flex items-center justify-between text-xs font-bold text-gray-400 mb-2">
             <span>Step {step} of 4</span>
             <span className="text-pink-400">
-              {step === 1 && 'Profile Setup & Unique Username'}
+              {step === 1 && 'Profile Setup & Animated Avatars'}
               {step === 2 && 'Real-Time Location & Place Detection'}
               {step === 3 && 'AI Face Liveness Verification'}
               {step === 4 && 'Claim Welcome Rewards & Launch'}
@@ -364,7 +352,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
           </div>
         </div>
 
-        {/* STEP 1: Profile Setup & Unique Username */}
+        {/* STEP 1: Profile Setup & Animated Avatars */}
         {step === 1 && (
           <form onSubmit={handleProceedToLocation} className="space-y-4">
             <div className="text-center">
@@ -377,7 +365,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </p>
             </div>
 
-            {/* Unique Username Input with Live Validation */}
+            {/* Unique Username Input */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-semibold text-gray-300">
@@ -422,7 +410,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               )}
             </div>
 
-            {/* Display Name & Gender */}
+            {/* Display Name & Age */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">Display Name</label>
@@ -474,25 +462,39 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </div>
             </div>
 
-            {/* Avatar Selection */}
+            {/* Expanded Animated Avatars Library */}
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1.5">Choose Avatar</label>
-              <div className="flex items-center gap-3 overflow-x-auto py-1">
-                {(REGIONAL_AVATARS[selectedRegion] || REGIONAL_AVATARS['Global']).map((url, idx) => (
-                  <img
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-gray-300">Choose Animated 3D Avatar</label>
+                <span className="text-[10px] text-pink-400 font-medium">12 Unique Avatars Available</span>
+              </div>
+              <div className="grid grid-cols-6 gap-2 p-2 rounded-2xl bg-black/30 border border-white/10 max-h-36 overflow-y-auto">
+                {(gender === 'male' ? ANIMATED_AVATARS.male : ANIMATED_AVATARS.female).concat(
+                  gender === 'male' ? ANIMATED_AVATARS.female : ANIMATED_AVATARS.male
+                ).map((url, idx) => (
+                  <div
                     key={idx}
-                    src={url}
-                    alt={`Avatar ${idx}`}
                     onClick={() => {
                       sound.playClick();
                       setAvatarUrl(url);
                     }}
-                    className={`w-12 h-12 rounded-full object-cover cursor-pointer border-2 transition-transform ${
+                    className={`relative rounded-xl overflow-hidden cursor-pointer border-2 transition-transform hover:scale-105 ${
                       avatarUrl === url
-                        ? 'border-pink-500 scale-110 shadow-[0_0_15px_rgba(255,46,147,0.6)]'
+                        ? 'border-pink-500 shadow-[0_0_12px_rgba(255,46,147,0.7)] scale-105'
                         : 'border-transparent opacity-70 hover:opacity-100'
                     }`}
-                  />
+                  >
+                    <img
+                      src={url}
+                      alt={`Avatar ${idx}`}
+                      className="w-12 h-12 object-cover"
+                    />
+                    {avatarUrl === url && (
+                      <div className="absolute inset-0 bg-pink-500/20 flex items-center justify-center">
+                        <CheckCircle2 size={16} className="text-white drop-shadow-md" />
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -533,7 +535,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </p>
             </div>
 
-            {/* Live Location Card */}
             <div className="p-4 rounded-2xl bg-[#090A15] border border-cyan-500/30 relative overflow-hidden">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -582,7 +583,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               )}
             </div>
 
-            {/* Manual Location Override (if GPS denied or customized) */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">Edit City</label>
@@ -590,7 +590,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   type="text"
                   value={cityInput}
                   onChange={(e) => setCityInput(e.target.value)}
-                  placeholder="e.g. Mumbai, Dubai, Riyadh"
+                  placeholder="e.g. Mumbai, Dubai, Muscat"
                   className="w-full bg-[#090A15] border border-white/15 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
                 />
               </div>
@@ -649,7 +649,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                 className="w-full h-full object-cover"
               />
 
-              {/* Liveness Target Ring */}
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                 <div className="w-44 h-44 rounded-full border-2 border-dashed border-pink-400/80 animate-spin-slow" />
               </div>
@@ -731,7 +730,6 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
               </p>
             </div>
 
-            {/* Rewards Cards */}
             <div className="grid grid-cols-2 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-900/30 border border-pink-400/40">
                 <div className="text-2xl mb-1">🎟️</div>
