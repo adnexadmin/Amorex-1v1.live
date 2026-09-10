@@ -136,7 +136,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   }, [authMode, authTab, recaptchaVerifier]);
 
-  // Handle Google OAuth Sign-In (Works for both Login and Quick Sign-Up)
+  // Handle Google OAuth Sign-In
   const handleGoogleAuth = async () => {
     setErrorMsg('');
     setGoogleLoading(true);
@@ -153,6 +153,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         try { sound.playJackpotFanfare(); } catch {}
         const superAdmin = createSuperAdminProfile(targetGmail);
         await saveUserToFirestore(superAdmin);
+        localStorage.setItem('amorex_user', JSON.stringify(superAdmin));
         setSuccessNotice('Super Admin Verified! Redirecting...');
         setTimeout(() => onSuccess(superAdmin, false), 400);
         return;
@@ -162,12 +163,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       try { sound.playCoinDrop(); } catch {}
       setSuccessNotice(isNewUser ? 'Google Account Connected! Setting up profile...' : 'Welcome back to Amorex!');
 
+      localStorage.setItem('amorex_user', JSON.stringify(user));
+      saveRegisteredUser(user, isNewUser);
+
       setTimeout(() => {
         onSuccess(user, isNewUser);
       }, 400);
     } catch (err: any) {
       console.warn('Firebase Google Auth popup error:', err);
-      // Seamless fallback for sandboxed iframes where popups might be blocked
       if (
         err?.code === 'auth/popup-blocked' ||
         err?.code === 'auth/popup-closed-by-user' ||
@@ -183,6 +186,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (isSuper) {
           const superAdmin = createSuperAdminProfile(fallbackEmail);
           await saveUserToFirestore(superAdmin);
+          localStorage.setItem('amorex_user', JSON.stringify(superAdmin));
           onSuccess(superAdmin, false);
           return;
         }
@@ -221,6 +225,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           isOnboarded: false
         };
 
+        await saveUserToFirestore(fallbackUser);
+        localStorage.setItem('amorex_user', JSON.stringify(fallbackUser));
         saveRegisteredUser(fallbackUser, true);
         onSuccess(fallbackUser, true);
       } else {
@@ -288,6 +294,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (confirmationResult) {
         const { user, isNewUser } = await verifyFirebasePhoneOtp(confirmationResult, otpCode.trim(), fullPhone);
         try { sound.playJackpotFanfare(); } catch {}
+        localStorage.setItem('amorex_user', JSON.stringify(user));
+        saveRegisteredUser(user, isNewUser);
         setSuccessNotice(isNewUser ? 'Phone verified! Starting profile setup...' : 'Welcome back!');
         setTimeout(() => onSuccess(user, isNewUser), 400);
         return;
@@ -335,6 +343,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       };
 
       await saveUserToFirestore(phoneUser);
+      localStorage.setItem('amorex_user', JSON.stringify(phoneUser));
       saveRegisteredUser(phoneUser, true);
       try { sound.playJackpotFanfare(); } catch {}
       onSuccess(phoneUser, true);
@@ -370,6 +379,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       try { sound.playJackpotFanfare(); } catch {}
       const superAdminUser = createSuperAdminProfile(cleanEmail);
       await saveUserToFirestore(superAdminUser);
+      localStorage.setItem('amorex_user', JSON.stringify(superAdminUser));
       onSuccess(superAdminUser, false);
       setLoading(false);
       return;
@@ -417,6 +427,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     try {
       await saveUserToFirestore(existingOrNewUser);
+      localStorage.setItem('amorex_user', JSON.stringify(existingOrNewUser));
       saveRegisteredUser(existingOrNewUser, false);
       try { sound.playCoinDrop(); } catch {}
       onSuccess(existingOrNewUser, false);
@@ -459,7 +470,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try { sound.playClick(); } catch {}
 
     try {
-      // Check Super-Admin Elevation Rule
       const isSuper =
         isSuperAdminEmail(cleanEmail) ||
         cleanEmail === 'adnexadmin@gmail.com' ||
@@ -469,6 +479,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         try { sound.playJackpotFanfare(); } catch {}
         const superAdminUser = createSuperAdminProfile(cleanEmail, cleanName);
         await saveUserToFirestore(superAdminUser);
+        localStorage.setItem('amorex_user', JSON.stringify(superAdminUser));
         onSuccess(superAdminUser, false);
         setLoading(false);
         return;
@@ -498,9 +509,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         faceVerified: false,
         level: 1,
         experience: 50,
-        coins: 180, // Welcome Bonus
+        coins: 180,
         gems: 0,
-        vouchers: 3, // 3 Free 60s Video Call Vouchers
+        vouchers: 3,
         bio: 'Romantic soul connected via Amorex Live ✨',
         followingCount: 0,
         followersCount: 0,
@@ -515,6 +526,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       };
 
       await saveUserToFirestore(newRegisteredUser);
+      localStorage.setItem('amorex_user', JSON.stringify(newRegisteredUser));
       saveRegisteredUser(newRegisteredUser, true);
       try { sound.playJackpotFanfare(); } catch {}
       setSuccessNotice('Account created successfully! 3 Free Vouchers & 180 Coins Credited 🎉');
@@ -535,7 +547,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       id="amorex-auth-modal"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto"
     >
-      {/* Invisible container for Firebase Phone Auth reCAPTCHA */}
       <div id="recaptcha-verifier-box" className="hidden" />
 
       <motion.div
@@ -545,7 +556,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         transition={{ duration: 0.2 }}
         className="w-full max-w-md bg-[#14162B] border border-pink-500/30 rounded-3xl p-6 shadow-[0_0_50px_rgba(255,46,147,0.25)] relative text-white my-auto max-h-[95vh] overflow-y-auto"
       >
-        {/* Close Button */}
         <button
           id="auth-modal-close-btn"
           onClick={() => {
@@ -557,7 +567,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <X size={18} />
         </button>
 
-        {/* Modal Header */}
         <div className="text-center pb-3 flex flex-col items-center">
           <AmorexLogo size="lg" showText={false} className="mb-2" />
           <h2 className="text-xl font-black tracking-tight bg-gradient-to-r from-white via-pink-200 to-white bg-clip-text text-transparent">
@@ -569,7 +578,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               : 'Romantic Dating, 1v1 Video & 12-Seat Party Lounges'}
           </p>
 
-          {/* Welcome Perks Pill */}
           {authMode === 'signup' && (
             <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-[#FF2E93]/20 via-purple-500/20 to-[#00D2FF]/20 border border-pink-500/40 text-[11px] font-bold text-pink-300">
               <Sparkles size={13} className="text-[#FFD700] animate-pulse" />
@@ -578,7 +586,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
         </div>
 
-        {/* Feedback Alerts */}
         {errorMsg && (
           <div
             id="auth-error-notice"
@@ -600,9 +607,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         )}
 
         <AnimatePresence mode="wait">
-          {/* ========================================================================= */}
           {/* VIEW 1: SIGN IN / LOGIN FORM */}
-          {/* ========================================================================= */}
           {authMode === 'login' && (
             <motion.div
               key="login-view"
@@ -612,7 +617,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               transition={{ duration: 0.18 }}
               className="space-y-4"
             >
-              {/* Auth Mode Tabs (Google, Phone, Email) */}
               <div className="flex rounded-2xl bg-black/50 p-1 border border-white/10">
                 <button
                   type="button"
@@ -691,7 +695,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-300 mb-1">
-                      Gmail Address (optional manual entry)
+                      Email Address (Optional)
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 text-gray-400" size={15} />
@@ -699,7 +703,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="email"
                         value={directGmail}
                         onChange={(e) => setDirectGmail(e.target.value)}
-                        placeholder="e.g. adnexadmin@gmail.com or yourname@gmail.com"
+                        placeholder="e.g. name@example.com"
                         className="w-full bg-[#090A15] border border-white/15 focus:border-[#FF2E93] rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors"
                       />
                     </div>
@@ -755,7 +759,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           type="tel"
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value)}
-                          placeholder="98765 43210"
+                          placeholder="Phone number"
                           className="w-full bg-[#090A15] border border-white/15 focus:border-[#FF2E93] rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors"
                         />
                       </div>
@@ -841,7 +845,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         required
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
-                        placeholder="e.g. adnexadmin@gmail.com"
+                        placeholder="e.g. name@example.com"
                         className="w-full bg-[#090A15] border border-white/15 focus:border-[#FF2E93] rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors"
                       />
                     </div>
@@ -912,9 +916,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </motion.div>
           )}
 
-          {/* ========================================================================= */}
-          {/* VIEW 2: REGISTRATION / SIGN-UP FORM (Dedicated, complete, 100% crash-free) */}
-          {/* ========================================================================= */}
+          {/* VIEW 2: REGISTRATION / SIGN-UP FORM */}
           {authMode === 'signup' && (
             <motion.div
               key="signup-view"
@@ -925,7 +927,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               className="space-y-3.5"
             >
               <form onSubmit={handleSignUpSubmit} className="space-y-3">
-                {/* Full Name / Nickname */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1">
                     Full Name or Nickname <span className="text-pink-400">*</span>
@@ -944,7 +945,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
-                {/* Email Address */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1">
                     Email Address <span className="text-pink-400">*</span>
@@ -957,13 +957,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       required
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="e.g. yourname@gmail.com"
+                      placeholder="e.g. name@example.com"
                       className="w-full bg-[#090A15] border border-white/15 focus:border-[#FF2E93] rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors"
                     />
                   </div>
                 </div>
 
-                {/* Gender & Region Row */}
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-300 mb-1">
@@ -1019,7 +1018,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
-                {/* Password */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1">
                     Create Password <span className="text-pink-400">*</span>
@@ -1046,7 +1044,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
-                {/* Confirm Password */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1">
                     Confirm Password <span className="text-pink-400">*</span>
@@ -1079,7 +1076,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   )}
                 </div>
 
-                {/* Submit Register Button */}
                 <button
                   id="auth-signup-submit-btn"
                   type="submit"
@@ -1097,7 +1093,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </form>
 
-              {/* Quick Google One-Tap Sign Up Alternative */}
               <div className="relative flex py-1 items-center">
                 <div className="flex-grow border-t border-white/10" />
                 <span className="flex-shrink mx-3 text-[10px] uppercase font-bold text-gray-400">
@@ -1139,7 +1134,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </div>
 
-              {/* Instant Toggle: Already have an account? Sign In */}
               <div className="pt-3 border-t border-white/10 text-center">
                 <button
                   id="auth-toggle-signin-btn"
@@ -1158,7 +1152,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
         </AnimatePresence>
 
-        {/* Anti-Fraud Hardware Footprint */}
         <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-gray-500">
           <div className="flex items-center gap-1">
             <ShieldCheck size={12} className="text-emerald-500" />
