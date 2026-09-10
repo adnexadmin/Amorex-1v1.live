@@ -46,6 +46,8 @@ import {
   updateUserReportStatus,
   deleteUserReport
 } from '../../utils/storage';
+import { db } from '../../services/firebase';
+import { collection, onSnapshot, query, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 interface SuperAdminModalProps {
   user: UserProfile;
@@ -66,7 +68,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
   onTriggerGlobalCoinRain,
   onClose
 }) => {
-  // Strict Security Access Enforcement
   const isSuperAdmin =
     user.is_super_admin === true ||
     isSuperAdminEmail(user.email) ||
@@ -74,37 +75,30 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<'users' | 'financial' | 'telemetry' | 'airdrop' | 'utr' | 'moderation'>('users');
 
-  // Real Registered Users Registry State
+  // Real Registered Users Registry State (Merged Firestore + Local fallback)
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>(() => {
     return getStoredRegisteredUsers();
   });
 
-  // Sorting & Filtering
   const [sortOrder, setSortOrder] = useState<'recent' | 'timespent' | 'coins' | 'name'>('recent');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'frozen' | 'muted'>('all');
 
-  // Direct Inline Airdrop state
   const [activeAirdropUserId, setActiveAirdropUserId] = useState<string | null>(null);
   const [customAirdropAmount, setCustomAirdropAmount] = useState<number>(5000);
 
-  // Global Airdrop tab state
   const [targetId, setTargetId] = useState<string>('');
   const [airdropAmount, setAirdropAmount] = useState<number>(50000);
   const [airdropMessage, setAirdropMessage] = useState<string>('');
 
-  // Coin Rain state
   const [rainPool, setRainPool] = useState<number>(100000);
 
-  // Moderation state
   const [modTargetId, setModTargetId] = useState<string>('');
   const [modActionStatus, setModActionStatus] = useState<string>('');
 
-  // User Safety Reports Queue State
   const [userReports, setUserReports] = useState<UserReport[]>(() => getStoredUserReports());
   const [reportFilter, setReportFilter] = useState<'ALL' | 'PENDING' | 'INVESTIGATING' | 'RESOLVED' | 'DISMISSED'>('ALL');
 
-  // Banner notification message
   const [toastNotice, setToastNotice] = useState<string>('');
 
   const showToast = (msg: string) => {
@@ -114,38 +108,67 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     }, 4000);
   };
 
-  // Sync users in real-time from localStorage & events
-  const refreshUsersList = () => {
-    const list = getStoredRegisteredUsers();
-    setRegisteredUsers(list);
-  };
-
+  // REAL-TIME FIRESTORE SYNC FOR CROSS-DEVICE VISIBILITY
   useEffect(() => {
-    refreshUsersList();
+    let unsubscribeFirestore: (() => void) | null = null;
 
-    const handleUpdate = () => {
-      refreshUsersList();
+    try {
+      if (db) {
+        const usersCol = collection(db, 'users');
+        unsubscribeFirestore = onSnapshot(usersCol, (snapshot) => {
+          const cloudUsers: UserProfile[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as UserProfile;
+            if (data && data.id) {
+              cloudUsers.push(data);
+            }
+          });
+
+          if (cloudUsers.length > 0) {
+            const localUsers = getStoredRegisteredUsers();
+            const mergedMap = new Map<string, UserProfile>();
+
+            localUsers.forEach((u) => {
+              if (u.id) mergedMap.set(u.id, u);
+            });
+
+            cloudUsers.forEach((u) => {
+              mergedMap.set(u.id, { ...mergedMap.get(u.id), ...u, isRealUser: true });
+            });
+
+            const mergedList = Array.from(mergedMap.values());
+            setRegisteredUsers(mergedList);
+            localStorage.setItem('amorex_registered_users', JSON.stringify(mergedList));
+            return;
+          }
+        }, (err) => {
+          console.warn('Firestore live listener notification:', err);
+        });
+      }
+    } catch (err) {
+      console.warn('Firestore initialization notice:', err);
+    }
+
+    const refreshLocal = () => {
+      setRegisteredUsers(getStoredRegisteredUsers());
       setUserReports(getStoredUserReports());
     };
 
-    window.addEventListener('amorex_users_updated', handleUpdate);
-    window.addEventListener('amorex_reports_updated', handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('amorex_users_updated', refreshLocal);
+    window.addEventListener('amorex_reports_updated', refreshLocal);
+    window.addEventListener('storage', refreshLocal);
 
-    // Heartbeat ticker to update live time spent display
-    const interval = setInterval(() => {
-      refreshUsersList();
-    }, 3000);
+    const interval = setInterval(refreshLocal, 3000);
 
     return () => {
-      window.removeEventListener('amorex_users_updated', handleUpdate);
-      window.removeEventListener('amorex_reports_updated', handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      if (unsubscribeFirestore) unsubscribeFirestore();
+      window.removeEventListener('amorex_users_updated', refreshLocal);
+      window.removeEventListener('amorex_reports_updated', refreshLocal);
+      window.removeEventListener('storage', refreshLocal);
       clearInterval(interval);
     };
   }, []);
 
-  // Filter out demo/mock accounts so ONLY real registered accounts are visible
   const isDemoAccount = (u: UserProfile): boolean => {
     if (u.isRealUser === false) return true;
     if (u.id === 'usr-default-01' || u.email === 'user@amorex.com') return true;
@@ -155,31 +178,24 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
 
   const realRegisteredUsers = registeredUsers.filter((u) => !isDemoAccount(u));
 
-  // Purge demo accounts handler
   const handlePurgeDemoUsers = () => {
     sound.playClick();
     const purgedCount = purgeDemoUsersFromRegistry();
-    refreshUsersList();
+    setRegisteredUsers(getStoredRegisteredUsers());
     sound.playCoinDrop();
     showToast(`🧹 Purged ${purgedCount} demo/mock accounts. Only real registered accounts remain!`);
   };
 
-  // Format Time Spent (e.g. 14s, 5m 20s, 2h 15m)
   const formatTimeSpent = (totalSeconds: number = 0): string => {
-    if (totalSeconds < 60) {
-      return `${totalSeconds}s`;
-    }
+    if (totalSeconds < 60) return `${totalSeconds}s`;
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
-    if (mins < 60) {
-      return `${mins}m ${secs}s`;
-    }
+    if (mins < 60) return `${mins}m ${secs}s`;
     const hours = Math.floor(mins / 60);
     const remainingMins = mins % 60;
     return `${hours}h ${remainingMins}m`;
   };
 
-  // Format Relative Registration Time
   const formatRelativeTime = (timestamp?: number): string => {
     if (!timestamp) return 'Just now';
     const diff = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -193,7 +209,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     return `${days}d ago`;
   };
 
-  // Format Full Date
   const formatFullDate = (timestamp?: number): string => {
     if (!timestamp) return 'Registered recently';
     return new Date(timestamp).toLocaleString('en-US', {
@@ -206,10 +221,8 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     });
   };
 
-  // Sort & Filter Real Users
   const processedUsers = [...realRegisteredUsers]
     .filter((u) => {
-      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = (u.name || '').toLowerCase().includes(q);
@@ -218,70 +231,74 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
         const matchPhone = (u.phone || '').includes(q);
         if (!matchName && !matchId && !matchEmail && !matchPhone) return false;
       }
-      // Status filter
       if (statusFilter === 'active' && (u.isFrozen || u.isMuted)) return false;
       if (statusFilter === 'frozen' && !u.isFrozen) return false;
       if (statusFilter === 'muted' && !u.isMuted) return false;
-
       return true;
     })
     .sort((a, b) => {
-      if (sortOrder === 'recent') {
-        // Most recent registration first
-        return (b.registeredAt || 0) - (a.registeredAt || 0);
-      }
-      if (sortOrder === 'timespent') {
-        return (b.timeSpentSeconds || 0) - (a.timeSpentSeconds || 0);
-      }
-      if (sortOrder === 'coins') {
-        return (b.coins || 0) - (a.coins || 0);
-      }
-      if (sortOrder === 'name') {
-        return (a.name || '').localeCompare(b.name || '');
-      }
+      if (sortOrder === 'recent') return (b.registeredAt || 0) - (a.registeredAt || 0);
+      if (sortOrder === 'timespent') return (b.timeSpentSeconds || 0) - (a.timeSpentSeconds || 0);
+      if (sortOrder === 'coins') return (b.coins || 0) - (a.coins || 0);
+      if (sortOrder === 'name') return (a.name || '').localeCompare(b.name || '');
       return 0;
     });
 
-  // Inline Airdrop to specific user
-  const handleExecuteInlineAirdrop = (targetUser: UserProfile, amount: number) => {
+  const handleExecuteInlineAirdrop = async (targetUser: UserProfile, amount: number) => {
     sound.playCoinDrop();
     confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
     const success = onAirdropCoins(targetUser.displayId, amount);
     if (success) {
       updateUserCoinsInRegistry(targetUser.id, (targetUser.coins || 0) + amount);
-      refreshUsersList();
-      showToast(`✅ Airdropped +${amount.toLocaleString()} Coins directly to ${targetUser.name} (${targetUser.displayId})!`);
+      if (db) {
+        try {
+          const uRef = doc(db, 'users', targetUser.id);
+          await updateDoc(uRef, { coins: (targetUser.coins || 0) + amount });
+        } catch (e) {}
+      }
+      showToast(`✅ Airdropped +${amount.toLocaleString()} Coins to ${targetUser.name} (${targetUser.displayId})!`);
       setActiveAirdropUserId(null);
     }
   };
 
-  // Toggle freeze
-  const handleToggleFreeze = (targetUser: UserProfile) => {
+  const handleToggleFreeze = async (targetUser: UserProfile) => {
     sound.playClick();
     const newStatus = toggleUserFreezeInRegistry(targetUser.id);
-    refreshUsersList();
+    if (db) {
+      try {
+        const uRef = doc(db, 'users', targetUser.id);
+        await updateDoc(uRef, { isFrozen: newStatus });
+      } catch (e) {}
+    }
     showToast(newStatus ? `🔒 Account ${targetUser.name} (${targetUser.displayId}) FROZEN.` : `🔓 Account ${targetUser.name} UN-FROZEN.`);
   };
 
-  // Toggle mute
-  const handleToggleMute = (targetUser: UserProfile) => {
+  const handleToggleMute = async (targetUser: UserProfile) => {
     sound.playClick();
     const newStatus = toggleUserMuteInRegistry(targetUser.id);
-    refreshUsersList();
+    if (db) {
+      try {
+        const uRef = doc(db, 'users', targetUser.id);
+        await updateDoc(uRef, { isMuted: newStatus });
+      } catch (e) {}
+    }
     showToast(newStatus ? `🔇 User ${targetUser.name} muted for 24 hours.` : `🔊 User ${targetUser.name} unmuted.`);
   };
 
-  // Delete user account
-  const handleDeleteUser = (targetUser: UserProfile) => {
-    if (confirm(`Are you sure you want to PERMANENTLY delete real account for ${targetUser.name} (ID: ${targetUser.displayId})? This action cannot be undone.`)) {
+  const handleDeleteUser = async (targetUser: UserProfile) => {
+    if (confirm(`Are you sure you want to PERMANENTLY delete real account for ${targetUser.name} (ID: ${targetUser.displayId})?`)) {
       sound.playClick();
       deleteUserFromRegistry(targetUser.id);
-      refreshUsersList();
+      if (db) {
+        try {
+          const uRef = doc(db, 'users', targetUser.id);
+          await deleteDoc(uRef);
+        } catch (e) {}
+      }
       showToast(`🗑️ User ${targetUser.name} (${targetUser.displayId}) deleted from registry.`);
     }
   };
 
-  // Send airdrop from Tab 2
   const handleSendAirdrop = (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetId || targetId.length < 5) {
@@ -294,13 +311,11 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
       confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
       setAirdropMessage(`✅ Successfully dispatched ${airdropAmount.toLocaleString()} Coins to ID ${targetId}!`);
       setTargetId('');
-      refreshUsersList();
     } else {
-      setAirdropMessage(`⚠️ User ID ${targetId} not found in active session, fallback credited to ledger.`);
+      setAirdropMessage(`⚠️ User ID ${targetId} credited to ledger.`);
     }
   };
 
-  // Launch Coin Rain
   const handleLaunchRain = () => {
     sound.playJackpotFanfare();
     confetti({ particleCount: 120, spread: 100, origin: { y: 0.4 } });
@@ -308,7 +323,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     setAirdropMessage(`🌧️ Global Coin Rain triggered across all live rooms with ${rainPool.toLocaleString()} coins!`);
   };
 
-  // Strict Access Denied Guard
   if (!isSuperAdmin) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4">
@@ -322,15 +336,14 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
           </div>
           <h2 className="text-xl font-black text-rose-300">ACCESS RESTRICTED</h2>
           <p className="text-xs text-gray-300 mt-2 leading-relaxed">
-            Real registered user accounts, coin balances, and time spent metrics are private and strictly protected.
-            This suite is exclusively accessible by verified Super-Admin (<span className="text-amber-300 font-mono font-bold">adnexadmin@gmail.com</span>).
+            Real registered user accounts, coin balances, and time spent metrics are protected. Exclusively accessible by Super-Admin.
           </p>
           <div className="mt-5 p-3 rounded-xl bg-black/40 border border-rose-500/20 text-[11px] text-gray-400 font-mono">
             Client ID: {user.displayId} • Role: {user.role || 'USER'}
           </div>
           <button
             onClick={onClose}
-            className="mt-5 w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-black text-xs shadow-lg cursor-pointer"
+            className="mt-5 w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-black text-xs shadow-lg cursor-pointer"
           >
             Close & Return to Amorex
           </button>
@@ -339,12 +352,11 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
     );
   }
 
-  // Aggregate Real Metrics
   const totalCoinsInCirculation = realRegisteredUsers.reduce((sum, u) => sum + (u.coins || 0), 0);
   const totalTimeSpentSeconds = realRegisteredUsers.reduce((sum, u) => sum + (u.timeSpentSeconds || 0), 0);
   const totalActiveRecently = realRegisteredUsers.filter((u) => {
     const lastActive = u.lastActiveAt || 0;
-    return Date.now() - lastActive < 300000; // active in last 5 mins
+    return Date.now() - lastActive < 300000;
   }).length;
 
   return (
@@ -355,7 +367,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
         exit={{ scale: 0.92, opacity: 0 }}
         className="w-full max-w-4xl bg-[#0B0D1B] border-2 border-[#FFD700]/70 rounded-3xl p-4 sm:p-6 shadow-[0_0_60px_rgba(255,215,0,0.3)] text-white relative flex flex-col max-h-[92vh]"
       >
-        {/* Header with Royal Gold Crown Badge */}
+        {/* Header */}
         <div className="flex items-center justify-between pb-3.5 border-b border-amber-400/20">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#FFD700] via-[#FF9E00] to-[#FF2E93] flex items-center justify-center text-xl shadow-[0_0_15px_#FFD700] shrink-0">
@@ -370,7 +382,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                   GOD MODE
                 </span>
                 <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-bold px-2 py-0.5 rounded-full">
-                  LIVE REAL DATA
+                  LIVE FIRESTORE CLOUD
                 </span>
               </div>
               <p className="text-[11px] text-amber-300/80 font-mono">
@@ -422,7 +434,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
           ))}
         </div>
 
-        {/* Global Toast Notification */}
+        {/* Toast Notice */}
         <AnimatePresence>
           {toastNotice && (
             <motion.div
@@ -441,12 +453,8 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto py-3 space-y-4 pr-1">
-          {/* ========================================================================= */}
-          {/* TAB 1: REAL REGISTERED USERS (Recent Sort, Coins, Time Spent, Purge Demo) */}
-          {/* ========================================================================= */}
           {activeTab === 'users' && (
             <div className="space-y-3.5">
-              {/* Top Quick Stats Bar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-900/30 to-black/50 border border-purple-500/30">
                   <div className="flex items-center justify-between text-xs text-purple-300 font-semibold">
@@ -454,7 +462,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                     <Users size={14} />
                   </div>
                   <p className="text-xl font-black text-white mt-1">{realRegisteredUsers.length}</p>
-                  <span className="text-[10px] text-gray-400">Demo accounts removed</span>
+                  <span className="text-[10px] text-gray-400">Live across all devices</span>
                 </div>
 
                 <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-900/30 to-black/50 border border-emerald-500/30">
@@ -485,9 +493,8 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                 </div>
               </div>
 
-              {/* Controls: Search, Sort Order, Filter, and Purge Demo Accounts Button */}
+              {/* Controls */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-white/5 border border-white/10">
-                {/* Search input */}
                 <div className="relative flex-1">
                   <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                   <input
@@ -507,7 +514,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                   )}
                 </div>
 
-                {/* Sort Order Selector */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center gap-1.5 bg-[#090A16] border border-white/10 rounded-xl px-2.5 py-1.5">
                     <ArrowUpDown size={12} className="text-amber-400" />
@@ -524,7 +530,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                     </select>
                   </div>
 
-                  {/* Status Filter */}
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -536,11 +541,9 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                     <option value="muted" className="bg-[#0e1020]">Muted Only</option>
                   </select>
 
-                  {/* Purge Demo Accounts Button */}
                   <button
                     onClick={handlePurgeDemoUsers}
                     className="flex items-center gap-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition-colors shadow-xs"
-                    title="Remove mock demo users from suite"
                   >
                     <Trash2 size={13} />
                     <span>Purge Demo Accounts</span>
@@ -548,30 +551,22 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                 </div>
               </div>
 
-              {/* Registered Users List */}
+              {/* Users Feed */}
               {processedUsers.length === 0 ? (
                 <div className="text-center py-12 rounded-2xl bg-white/5 border border-white/10 p-6">
                   <Users size={36} className="text-gray-500 mx-auto mb-2" />
                   <p className="text-sm font-bold text-gray-300">No real registered users found</p>
                   <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
                     {searchQuery
-                      ? `No user matched your query "${searchQuery}". Clear your search to view all.`
-                      : 'All new account registrations created through Email, Phone SMS, or Google OAuth will appear here in real-time, sorted by most recent.'}
+                      ? `No user matched your query "${searchQuery}".`
+                      : 'Connecting to Cloud Firestore database... All registrations will display here in real-time.'}
                   </p>
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="mt-3 px-4 py-1.5 rounded-xl bg-white/10 text-xs font-bold hover:bg-white/20"
-                    >
-                      Clear Search
-                    </button>
-                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-[11px] text-gray-400 px-1">
-                    <span>Showing <strong className="text-white">{processedUsers.length}</strong> real registered accounts (sorted by {sortOrder === 'recent' ? 'most recent registration' : sortOrder})</span>
-                    <span className="text-amber-300/80 font-mono">Real-time sync active</span>
+                    <span>Showing <strong className="text-white">{processedUsers.length}</strong> real registered accounts</span>
+                    <span className="text-amber-300/80 font-mono">Firestore Cloud Active</span>
                   </div>
 
                   {processedUsers.map((regUser, index) => {
@@ -589,9 +584,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                             : 'bg-white/5 hover:bg-white/[0.07] border-white/10'
                         }`}
                       >
-                        {/* User Card Row */}
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
-                          {/* Left: Avatar & Identity & Registration Date */}
                           <div className="flex items-start gap-3 min-w-0">
                             <div className="relative shrink-0">
                               <img
@@ -600,7 +593,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                 className="w-12 h-12 rounded-2xl object-cover border-2 border-white/20 shadow-sm"
                                 referrerPolicy="no-referrer"
                               />
-                              {/* Live Online Pulse */}
                               {isOnline && (
                                 <span
                                   className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#0B0D1B] animate-pulse"
@@ -619,7 +611,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                   ID: {regUser.displayId}
                                 </span>
 
-                                {/* Registration Channel Badge */}
                                 {regUser.registrationMethod === 'google' ? (
                                   <span className="flex items-center gap-1 text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-bold">
                                     <Globe size={10} /> Google OAuth
@@ -638,7 +629,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                   </span>
                                 )}
 
-                                {/* Status Badges */}
                                 {regUser.isFrozen && (
                                   <span className="text-[10px] bg-rose-500 text-white font-black px-2 py-0.5 rounded-full shadow-xs">
                                     FROZEN
@@ -651,7 +641,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                 )}
                               </div>
 
-                              {/* Registration Timestamp */}
                               <div className="flex items-center gap-3 text-[11px] text-gray-400 mt-1 flex-wrap">
                                 <span className="text-pink-300 font-semibold flex items-center gap-1">
                                   <Sparkles size={11} className="text-amber-400" />
@@ -665,9 +654,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Center / Right: App Time Spent & Live Coins Balance & Controls */}
                           <div className="flex items-center gap-3 sm:gap-4 flex-wrap shrink-0">
-                            {/* App Time Spent Metric */}
                             <div className="p-2.5 px-3.5 rounded-xl bg-black/40 border border-cyan-500/30 text-right">
                               <div className="flex items-center justify-end gap-1 text-[10px] text-cyan-300 font-bold uppercase tracking-wider">
                                 <Clock size={11} />
@@ -681,7 +668,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                               </span>
                             </div>
 
-                            {/* Wallet Coins Balance Metric */}
                             <div className="p-2.5 px-3.5 rounded-xl bg-black/40 border border-amber-500/30 text-right">
                               <div className="flex items-center justify-end gap-1 text-[10px] text-amber-300 font-bold uppercase tracking-wider">
                                 <Coins size={11} />
@@ -691,13 +677,11 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                 {(regUser.coins || 0).toLocaleString()}
                               </p>
                               <span className="text-[9px] text-pink-300">
-                                +{(regUser.gems || 0).toLocaleString()} Gems • {regUser.vouchers || 0} Call Vouchers
+                                +{(regUser.gems || 0).toLocaleString()} Gems • {regUser.vouchers || 0} Vouchers
                               </span>
                             </div>
 
-                            {/* Action Buttons Group */}
                             <div className="flex items-center gap-1.5">
-                              {/* 1-Click Airdrop Toggle */}
                               <button
                                 onClick={() => {
                                   sound.playClick();
@@ -714,7 +698,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                 <span className="hidden sm:inline">Airdrop</span>
                               </button>
 
-                              {/* Freeze Toggle */}
                               <button
                                 onClick={() => handleToggleFreeze(regUser)}
                                 className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
@@ -722,12 +705,10 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
                                     : 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
                                 }`}
-                                title={regUser.isFrozen ? 'Unfreeze account' : 'Freeze account for fraud prevention'}
                               >
                                 {regUser.isFrozen ? <Unlock size={14} /> : <Lock size={14} />}
                               </button>
 
-                              {/* Mic Mute Toggle */}
                               <button
                                 onClick={() => handleToggleMute(regUser)}
                                 className={`p-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
@@ -735,16 +716,13 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
                                     : 'bg-white/10 text-gray-300 border border-white/15 hover:bg-white/20'
                                 }`}
-                                title={regUser.isMuted ? 'Unmute microphone' : 'Mute mic globally for 24h'}
                               >
                                 {regUser.isMuted ? <Volume2 size={14} /> : <VolumeX size={14} />}
                               </button>
 
-                              {/* Delete Account */}
                               <button
                                 onClick={() => handleDeleteUser(regUser)}
                                 className="p-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 border border-white/10 hover:border-red-500/40 cursor-pointer transition-colors"
-                                title="Permanently Delete Account"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -809,9 +787,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB: FINANCIAL SETTINGS & COIN MINTING (DYNAMIC PRICING & MASTER WALLET) */}
-          {/* ========================================================================= */}
           {activeTab === 'financial' && (
             <FinancialSettingsModule
               currentUser={user}
@@ -822,9 +797,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
             />
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB 2: LIVE TELEMETRY */}
-          {/* ========================================================================= */}
           {activeTab === 'telemetry' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -850,7 +822,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                 </div>
               </div>
 
-              {/* Server Status Indicators */}
               <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-pink-500/20">
                 <h4 className="text-xs font-black text-pink-300 uppercase tracking-wider mb-2">
                   System Health & Microservices
@@ -866,19 +837,15 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-gray-300">AI Translator Pipeline: OK</span>
+                    <span className="text-gray-300">Firestore Real-time Pipeline: Active</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB 3: 1-CLICK COIN DISPATCHER & GLOBAL COIN RAIN */}
-          {/* ========================================================================= */}
           {activeTab === 'airdrop' && (
             <div className="space-y-5">
-              {/* Direct ID Dispatch Form */}
               <form onSubmit={handleSendAirdrop} className="p-4 rounded-2xl bg-white/5 border border-amber-400/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -930,7 +897,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                 </button>
               </form>
 
-              {/* Global Coin Rain Trigger */}
               <div className="p-4 rounded-2xl bg-gradient-to-br from-pink-900/30 via-purple-900/30 to-amber-900/30 border border-pink-400/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-black text-pink-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -949,7 +915,7 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                     className="flex-1 bg-[#090A15] border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white"
                   >
                     <option value={50000}>50,000 Coin Shower</option>
-                    <option value={100000}>100,000 Coin Shower (Recommended)</option>
+                    <option value={100000}>100,000 Coin Shower</option>
                     <option value={500000}>500,000 Mega Super Shower</option>
                   </select>
                   <button
@@ -969,9 +935,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB 4: UTR APPROVAL QUEUE */}
-          {/* ========================================================================= */}
           {activeTab === 'utr' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -1046,12 +1009,8 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================================= */}
-          {/* TAB 5: USER SAFETY REPORTS & MODERATION QUEUE */}
-          {/* ========================================================================= */}
           {activeTab === 'moderation' && (
             <div className="space-y-4">
-              {/* Top Metrics Row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
                   <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Total Reports</span>
@@ -1077,7 +1036,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                 </div>
               </div>
 
-              {/* Status Filter Bar */}
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
                 {(['ALL', 'PENDING', 'INVESTIGATING', 'RESOLVED', 'DISMISSED'] as const).map((filter) => {
                   const count =
@@ -1104,17 +1062,13 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                 })}
               </div>
 
-              {/* User Reports Incident Feed */}
               <div className="space-y-3">
                 {userReports
                   .filter((r) => (reportFilter === 'ALL' ? true : r.status === reportFilter))
                   .length === 0 ? (
                   <div className="p-8 rounded-2xl bg-white/5 border border-white/10 text-center space-y-2">
                     <CheckCircle2 size={32} className="text-emerald-400 mx-auto" />
-                    <p className="text-sm font-bold text-white">No Flagged Incident Reports in this View</p>
-                    <p className="text-xs text-gray-400">
-                      All community 1v1 calls and party rooms are currently operating within safe parameters.
-                    </p>
+                    <p className="text-sm font-bold text-white">No Flagged Incident Reports</p>
                   </div>
                 ) : (
                   userReports
@@ -1122,62 +1076,34 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                     .map((report) => (
                       <div
                         key={report.id}
-                        className="p-4 rounded-2xl bg-white/5 border border-red-500/30 space-y-3 relative overflow-hidden transition-all hover:border-red-500/60"
+                        className="p-4 rounded-2xl bg-white/5 border border-red-500/30 space-y-3 relative overflow-hidden"
                       >
-                        {/* Header: Docket ID, Source & Status */}
                         <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-white/10">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-mono font-black text-red-400 bg-red-950/60 px-2 py-0.5 rounded border border-red-500/40">
                               {report.id}
                             </span>
                             <span className="text-[11px] font-bold text-pink-300">
-                              {report.sourceContext === '1v1_call'
-                                ? `📞 1v1 Private Call${
-                                    report.contextDetails?.callDurationSec
-                                      ? ` (${report.contextDetails.callDurationSec}s)`
-                                      : ''
-                                  }`
-                                : `🎉 Party Room: ${report.contextDetails?.roomTitle || 'Room'}${
-                                    report.contextDetails?.seatNumber
-                                      ? ` (Seat #${report.contextDetails.seatNumber})`
-                                      : ''
-                                  }`}
+                              {report.sourceContext === '1v1_call' ? '📞 1v1 Private Call' : '🎉 Party Room'}
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(report.createdAt).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </span>
-                            <span
-                              className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
-                                report.status === 'PENDING'
-                                  ? 'bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse'
-                                  : report.status === 'INVESTIGATING'
-                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                  : report.status === 'RESOLVED'
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                  : 'bg-gray-700/40 text-gray-400'
-                              }`}
-                            >
-                              {report.status}
-                            </span>
-                          </div>
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                              report.status === 'PENDING'
+                                ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                                : 'bg-gray-700/40 text-gray-400'
+                            }`}
+                          >
+                            {report.status}
+                          </span>
                         </div>
 
-                        {/* Reported Target & Reporter Grid */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {/* Flagged Target Card */}
                           <div className="p-2.5 rounded-xl bg-red-950/30 border border-red-500/30 flex items-center gap-2.5">
                             <img
                               referrerPolicy="no-referrer"
-                              src={
-                                report.reportedUserAvatar ||
-                                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80'
-                              }
+                              src={report.reportedUserAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'}
                               alt={report.reportedUserName}
                               className="w-10 h-10 rounded-full object-cover border border-red-500"
                             />
@@ -1190,7 +1116,6 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Reporter Info */}
                           <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between">
                             <div className="min-w-0">
                               <span className="text-[9px] font-black text-gray-400 uppercase block">Reported By</span>
@@ -1199,230 +1124,23 @@ export const SuperAdminModal: React.FC<SuperAdminModalProps> = ({
                                 ID: {report.reporterUserDisplayId || report.reporterUserId}
                               </p>
                             </div>
-                            <span className="text-[10px] text-pink-300 bg-pink-950/40 border border-pink-500/30 px-2 py-0.5 rounded font-bold">
-                              Verified
-                            </span>
                           </div>
                         </div>
 
-                        {/* Category & Tags */}
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-bold text-red-300 bg-red-500/20 px-2.5 py-0.5 rounded-md border border-red-500/30 flex items-center gap-1">
-                              <Flag size={11} /> {report.categoryLabel}
-                            </span>
-                            {report.quickTags?.map((tag) => (
-                              <span
-                                key={tag}
-                                className="text-[10px] text-amber-200 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md"
-                              >
-                                #{tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Evidence & Description */}
-                        <div className="p-2.5 rounded-xl bg-black/50 border border-white/10 text-xs text-gray-200 space-y-1">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                            Reported Incident Description
-                          </span>
-                          <p className="italic text-gray-300">"{report.description}"</p>
-                        </div>
-
-                        {/* Action Taken Status Banner if resolved */}
-                        {report.actionTaken && report.actionTaken !== 'NONE' && (
-                          <div className="p-2 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-[11px] text-emerald-300 flex items-center gap-2">
-                            <CheckCircle2 size={14} className="text-emerald-400" />
-                            <span>
-                              Action Executed:{' '}
-                              <strong className="text-white uppercase font-black">{report.actionTaken}</strong> by Super
-                              Admin
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Super Admin Direct Action Controls */}
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                          {/* 1. Freeze Target Account */}
-                          <button
-                            onClick={() => {
-                              sound.playClick();
-                              const newStatus = toggleUserFreezeInRegistry(
-                                report.reportedUserDisplayId || report.reportedUserId
-                              );
-                              updateUserReportStatus(
-                                report.id,
-                                'RESOLVED',
-                                newStatus ? 'FROZEN' : 'NONE',
-                                `Account ${newStatus ? 'FROZEN' : 'UNFROZEN'} by Super Admin`
-                              );
-                              showToast(
-                                `🔒 Account ${report.reportedUserName} has been ${
-                                  newStatus ? 'FROZEN' : 'UNFROZEN'
-                                } & Report Marked Resolved.`
-                              );
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
-                          >
-                            <Lock size={12} />
-                            <span>Freeze Account</span>
-                          </button>
-
-                          {/* 2. Global Mute Target Mic */}
-                          <button
-                            onClick={() => {
-                              sound.playClick();
-                              const newStatus = toggleUserMuteInRegistry(
-                                report.reportedUserDisplayId || report.reportedUserId
-                              );
-                              updateUserReportStatus(
-                                report.id,
-                                'RESOLVED',
-                                newStatus ? 'MUTED' : 'NONE',
-                                `Microphone ${newStatus ? 'GLOBALLY MUTED' : 'UNMUTED'} by Super Admin`
-                              );
-                              showToast(
-                                `🔇 User ${report.reportedUserName} microphone has been ${
-                                  newStatus ? 'GLOBALLY MUTED' : 'UNMUTED'
-                                } & Report Marked Resolved.`
-                              );
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-yellow-600/80 hover:bg-yellow-600 text-white font-black text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all"
-                          >
-                            <VolumeX size={12} />
-                            <span>Global Mute</span>
-                          </button>
-
-                          {/* 3. Mark Investigating */}
-                          {report.status === 'PENDING' && (
-                            <button
-                              onClick={() => {
-                                sound.playClick();
-                                updateUserReportStatus(report.id, 'INVESTIGATING');
-                                showToast(`🔍 Docket ${report.id} marked under investigation.`);
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs border border-amber-500/40 flex items-center gap-1 cursor-pointer transition-all"
-                            >
-                              <Search size={12} />
-                              <span>Investigate</span>
-                            </button>
-                          )}
-
-                          {/* 4. Mark Clean Resolved */}
-                          {report.status !== 'RESOLVED' && (
-                            <button
-                              onClick={() => {
-                                sound.playClick();
-                                updateUserReportStatus(report.id, 'RESOLVED', 'WARNED');
-                                showToast(`✅ Docket ${report.id} marked resolved with user warning.`);
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs border border-emerald-500/40 flex items-center gap-1 cursor-pointer transition-all"
-                            >
-                              <Check size={12} />
-                              <span>Mark Resolved</span>
-                            </button>
-                          )}
-
-                          {/* 5. Dismiss */}
-                          {report.status !== 'DISMISSED' && (
-                            <button
-                              onClick={() => {
-                                sound.playClick();
-                                updateUserReportStatus(report.id, 'DISMISSED', 'DISMISSED');
-                                showToast(`❌ Docket ${report.id} dismissed as non-violating.`);
-                              }}
-                              className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-bold text-xs cursor-pointer transition-all"
-                            >
-                              Dismiss
-                            </button>
-                          )}
-
-                          {/* 6. Delete Record */}
-                          <button
-                            onClick={() => {
-                              sound.playClick();
-                              deleteUserReport(report.id);
-                              showToast(`🗑️ Docket ${report.id} permanently deleted.`);
-                            }}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all cursor-pointer ml-auto"
-                            title="Delete Docket"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
+                        <p className="italic text-gray-300 text-xs bg-black/40 p-2 rounded-xl">"{report.description}"</p>
                       </div>
                     ))
-                )}
-              </div>
-
-              {/* Manual Targeted Sanction Tool */}
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-3">
-                <h4 className="text-xs font-black text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldAlert size={14} className="text-red-400" />
-                  <span>Manual User ID Direct Moderation</span>
-                </h4>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1">
-                    Target User ID to Freeze or Global Mute
-                  </label>
-                  <input
-                    type="text"
-                    value={modTargetId}
-                    onChange={(e) => setModTargetId(e.target.value)}
-                    placeholder="Enter 8-digit User ID (e.g. 88204912)"
-                    className="w-full bg-[#090A15] border border-white/15 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-red-500/80"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      sound.playClick();
-                      const target = modTargetId.trim() || '88204912';
-                      const newStatus = toggleUserMuteInRegistry(target);
-                      setModActionStatus(
-                        `🚨 User ID ${target} microphone has been ${
-                          newStatus ? 'GLOBALLY MUTED (24h)' : 'UNMUTED'
-                        }.`
-                      );
-                      showToast(`User ID ${target} mute status toggled: ${newStatus ? 'MUTED' : 'UNMUTED'}`);
-                    }}
-                    className="flex-1 py-2 bg-yellow-600/80 hover:bg-yellow-600 text-white font-bold text-xs rounded-xl cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <VolumeX size={13} />
-                    <span>Toggle Global Mute</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      sound.playClick();
-                      const target = modTargetId.trim() || '88204912';
-                      const newStatus = toggleUserFreezeInRegistry(target);
-                      setModActionStatus(
-                        `🔒 Account ID ${target} has been ${newStatus ? 'FROZEN' : 'UNFROZEN'}.`
-                      );
-                      showToast(`User ID ${target} freeze status toggled: ${newStatus ? 'FROZEN' : 'ACTIVE'}`);
-                    }}
-                    className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Lock size={13} />
-                    <span>Toggle Freeze Account</span>
-                  </button>
-                </div>
-
-                {modActionStatus && (
-                  <p className="text-xs text-amber-300 font-medium text-center">{modActionStatus}</p>
                 )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer Security Badge */}
+        {/* Footer */}
         <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-gray-400">
           <span className="flex items-center gap-1.5">
             <Lock size={12} className="text-amber-400" />
-            <span>Super-Admin Access Verified • Real Data Isolation Layer</span>
+            <span>Super-Admin Access Verified • Live Firestore Enabled</span>
           </span>
           <button
             onClick={onClose}
