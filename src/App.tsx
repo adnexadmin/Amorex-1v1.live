@@ -13,7 +13,6 @@ import {
   CallHistoryItem
 } from './types';
 import {
-  initialUser,
   initialHosts,
   initialPartyRooms,
   initialMoments,
@@ -21,7 +20,6 @@ import {
   initialBackpack,
   initialTasks,
   initialUTRRequests,
-  virtualGifts,
   createSuperAdminProfile,
   saveRegisteredUser,
   updateUserTimeSpent,
@@ -31,10 +29,19 @@ import {
 import { sound } from './utils/audio';
 import {
   auth,
+  db,
   getUserFromFirestore,
   signOutFirebaseUser
 } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  doc, 
+  updateDoc 
+} from 'firebase/firestore';
 
 // Components
 import { Navbar } from './components/common/Navbar';
@@ -52,7 +59,6 @@ import { RechargeModal } from './components/modals/RechargeModal';
 import { SuperAdminModal } from './components/admin/SuperAdminModal';
 import { SupportAIBotModal } from './components/modals/SupportAIBotModal';
 import { MediaPermissionModal } from './components/modals/MediaPermissionModal';
-import { PWAInstallModal } from './components/common/PWAInstallModal';
 import { AppShareModal } from './components/modals/AppShareModal';
 import { AgentPromotionModal } from './components/modals/AgentPromotionModal';
 import { LoadingSplashScreen } from './components/common/LoadingSplashScreen';
@@ -63,9 +69,10 @@ import { MomentsTab } from './components/tabs/MomentsTab';
 import { PartyTab } from './components/tabs/PartyTab';
 import { MessagesTab } from './components/tabs/MessagesTab';
 import { ProfileTab } from './components/tabs/ProfileTab';
+import { Phone, PhoneOff } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export function App() {
-  // App state
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('amorex_user');
     return saved ? JSON.parse(saved) : null;
@@ -80,7 +87,6 @@ export function App() {
   const [isAdminSuiteOpen, setIsAdminSuiteOpen] = useState<boolean>(false);
   const [isSupportBotOpen, setIsSupportBotOpen] = useState<boolean>(false);
   const [supportBotContext, setSupportBotContext] = useState<{ source: string; query: string } | undefined>();
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isAgentPromoModalOpen, setIsAgentPromoModalOpen] = useState<boolean>(false);
   const [spentCoinsForPromo, setSpentCoinsForPromo] = useState<number>(0);
@@ -93,6 +99,14 @@ export function App() {
 
   // Active 1v1 Video Call state
   const [activeCallHost, setActiveCallHost] = useState<StreamHost | null>(null);
+
+  // Real-time Incoming Call State
+  const [incomingCallData, setIncomingCallData] = useState<{
+    callId: string;
+    callerName: string;
+    callerAvatar: string;
+    callerId: string;
+  } | null>(null);
 
   // Floating PiP state
   const [pipHost, setPipHost] = useState<StreamHost | null>(null);
@@ -164,7 +178,83 @@ export function App() {
     }
   }, [currentUser]);
 
-  // Reactive listener for profile & avatar updates dispatched across components
+  // Real-time Incoming Call Listener via Firebase Firestore
+  useEffect(() => {
+    if (!currentUser || !db) return;
+
+    const myId = currentUser.id || currentUser.displayId;
+    const callsCol = collection(db, 'calls');
+    
+    // Listen for calls directed to this user or call rooms containing user ID
+    const q = query(callsCol, where('status', '==', 'calling'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          const callId = change.doc.id;
+
+          // Check if this incoming call is meant for the logged in user
+          if (callId.includes(myId) && !activeCallHost) {
+            sound.playCallRinging();
+            setIncomingCallData({
+              callId,
+              callerName: data.callerName || 'Amorex User',
+              callerAvatar: data.callerAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+              callerId: data.callerId || 'user_caller'
+            });
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [currentUser, activeCallHost]);
+
+  // Handle Accept Incoming Call
+  const handleAcceptIncomingCall = async () => {
+    if (!incomingCallData) return;
+    sound.playCallConnected();
+
+    const dummyHost: StreamHost = {
+      id: incomingCallData.callerId,
+      name: incomingCallData.callerName,
+      avatar: incomingCallData.callerAvatar,
+      coverImage: incomingCallData.callerAvatar,
+      displayId: incomingCallData.callerId,
+      level: 5,
+      gender: 'female',
+      age: 23,
+      region: 'Online',
+      isLive: true,
+      viewerCount: 1,
+      coinRatePerMin: 60,
+      tags: ['Live'],
+      bio: 'Connected via 1v1 WebRTC',
+      followersCount: 100,
+      likesCount: 100,
+      languages: ['English'],
+      primaryLanguage: 'English'
+    };
+
+    setActiveCallHost(dummyHost);
+    setIncomingCallData(null);
+  };
+
+  // Handle Reject Incoming Call
+  const handleRejectIncomingCall = async () => {
+    if (!incomingCallData || !db) return;
+    sound.playEndCall();
+
+    try {
+      const callDocRef = doc(db, 'calls', incomingCallData.callId);
+      await updateDoc(callDocRef, { status: 'rejected' });
+    } catch (e) {
+      console.warn('Reject call update error:', e);
+    }
+
+    setIncomingCallData(null);
+  };
+
   useEffect(() => {
     const handleUserUpdated = (e: Event) => {
       const customEvt = e as CustomEvent<UserProfile>;
@@ -178,7 +268,6 @@ export function App() {
     };
   }, []);
 
-  // Real-time time spent ticker for active real users
   useEffect(() => {
     if (!currentUser || currentUser.is_super_admin || currentUser.isRealUser === false) return;
 
@@ -211,10 +300,8 @@ export function App() {
     localStorage.setItem('amorex_utr', JSON.stringify(utrRequests));
   }, [utrRequests]);
 
- // Firebase Auth Initial Session State Listener
   useEffect(() => {
     let isMounted = true;
-    // Safety watchdog: ensure loading splash screen resolves cleanly within 1.2s even if offline or slow network
     const watchdog = setTimeout(() => {
       if (isMounted) setIsAuthLoading(false);
     }, 1200);
@@ -253,7 +340,6 @@ export function App() {
     };
   }, []);
 
-  // Auth Handlers
   const handleAuthSuccess = (user: UserProfile, isNewUser: boolean = false) => {
     setCurrentUser(user);
     if (!user.is_super_admin) {
@@ -261,7 +347,6 @@ export function App() {
     }
     setIsAuthModalOpen(false);
 
-    // If new user or onboarding incomplete, redirect to profile setup
     if ((isNewUser || !user.isOnboarded) && !user.is_super_admin) {
       setIsOnboardingOpen(true);
     } else {
@@ -294,7 +379,6 @@ export function App() {
     setIsAdminSuiteOpen(true);
   };
 
-  // Coin and Wallet Handlers
   const handleDeductCoins = (amount: number): boolean => {
     if (!currentUser) return false;
     if (currentUser.coins < amount) {
@@ -308,7 +392,6 @@ export function App() {
       updateUserCoinsInRegistry(currentUser.id, newCoins, currentUser.gems);
     }
 
-    // High-converting Agent Promotion trigger on coin spending
     if (amount > 0) {
       setSpentCoinsForPromo((prev) => {
         const nextTotal = prev + amount;
@@ -335,7 +418,6 @@ export function App() {
     }
   };
 
-  // 1v1 Call Handlers
   const handleStart1v1Call = (host: StreamHost) => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
@@ -398,7 +480,6 @@ export function App() {
     }
   };
 
-  // Gifting Handlers
   const handleOpenGiftDrawer = (recipientName: string) => {
     if (!currentUser) {
       setIsAuthModalOpen(true);
@@ -413,7 +494,6 @@ export function App() {
     const deducted = handleDeductCoins(totalCost);
     if (!deducted) return;
 
-    // Grant gems/exp
     if (currentUser) {
       setCurrentUser((prev) =>
         prev
@@ -427,7 +507,6 @@ export function App() {
     }
   };
 
-  // Moments Handlers
   const handleLikePost = (postId: string) => {
     setMoments((prev) =>
       prev.map((m) => {
@@ -482,7 +561,6 @@ export function App() {
     setMoments((prev) => [post, ...prev]);
   };
 
-  // Messaging Handlers
   const handleSendMessage = (
     conversationId: string,
     text: string,
@@ -513,7 +591,6 @@ export function App() {
     );
   };
 
-  // UTR & Recharge Handlers
   const handleSubmitUTR = (req: Omit<UTRRequest, 'id' | 'status' | 'timestamp'>) => {
     const newReq: UTRRequest = {
       ...req,
@@ -544,7 +621,6 @@ export function App() {
     );
   };
 
-  // Super-Admin Actions
   const handleAirdropCoins = (targetDisplayId: string, amount: number): boolean => {
     let matched = false;
     if (currentUser && (currentUser.displayId === targetDisplayId || currentUser.id === targetDisplayId)) {
@@ -569,7 +645,6 @@ export function App() {
     setIsCoinRainActive(true);
   };
 
-  // Task & Backpack Actions
   const handleClaimTask = (taskId: string) => {
     setTasks((prev) =>
       prev.map((t) => {
@@ -594,12 +669,10 @@ export function App() {
     );
   };
 
-  // 1. While Firebase Auth is checking the initial user session, display branded loading splash screen
   if (isAuthLoading) {
     return <LoadingSplashScreen message="Authenticating session..." />;
   }
 
-  // 2. If no logged in user, render Landing Page (Mandatory Auth Only)
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#090A15] text-white">
@@ -624,11 +697,10 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#090A15] text-white flex flex-col relative overflow-x-hidden selection:bg-[#FF2E93] selection:text-white">
-      {/* Sleek Interface Ambient Glowing Orbs */}
       <div className="fixed top-[-100px] left-[-100px] w-[400px] h-[400px] bg-[#FF2E93] opacity-10 rounded-full blur-[100px] pointer-events-none z-0" />
       <div className="fixed bottom-[-100px] right-[-100px] w-[400px] h-[400px] bg-[#00D2FF] opacity-10 rounded-full blur-[100px] pointer-events-none z-0" />
 
-      {/* Top Fixed Navbar */}
+      {/* Top Navbar */}
       <Navbar
         user={currentUser}
         onOpenProfile={() => setActiveTab('PROFILE')}
@@ -639,7 +711,7 @@ export function App() {
         activeCoinRain={isCoinRainActive}
       />
 
-      {/* Main Tab Content View with Fullscreen BottomNav Inset */}
+      {/* Main Tab Content */}
       <main className="flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))]">
         {activeTab === 'LIVE' && (
           <LiveTab
@@ -706,7 +778,7 @@ export function App() {
         )}
       </main>
 
-      {/* Persistent Bottom 5-Tab Navigation Dock */}
+      {/* Bottom Navigation */}
       <BottomNav
         activeTab={activeTab}
         user={currentUser}
@@ -717,7 +789,53 @@ export function App() {
         unreadCount={conversations.reduce((acc, c) => acc + c.unreadCount, 0)}
       />
 
-      {/* Floating Picture-in-Picture Mini Stream */}
+      {/* REAL-TIME INCOMING 1V1 VIDEO CALL POPUP MODAL */}
+      <AnimatePresence>
+        {incomingCallData && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              className="w-full max-w-sm bg-gradient-to-b from-[#14162B] to-[#090A15] border-2 border-pink-500 rounded-3xl p-6 text-center space-y-5 shadow-[0_0_50px_rgba(255,46,147,0.5)]"
+            >
+              <div className="relative w-24 h-24 mx-auto">
+                <div className="w-full h-full rounded-full border-4 border-pink-500 animate-ping absolute inset-0 opacity-75" />
+                <img
+                  src={incomingCallData.callerAvatar}
+                  alt={incomingCallData.callerName}
+                  className="w-full h-full rounded-full object-cover border-2 border-white relative z-10 shadow-xl"
+                />
+              </div>
+
+              <div>
+                <h3 className="text-lg font-black text-white">{incomingCallData.callerName}</h3>
+                <p className="text-xs text-pink-300 font-semibold mt-1">Incoming 1v1 Video Call...</p>
+              </div>
+
+              <div className="flex items-center justify-center gap-6 pt-2">
+                <button
+                  onClick={handleRejectIncomingCall}
+                  className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+                  title="Decline Call"
+                >
+                  <PhoneOff size={24} />
+                </button>
+
+                <button
+                  onClick={handleAcceptIncomingCall}
+                  className="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white flex items-center justify-center shadow-[0_0_25px_rgba(16,185,129,0.8)] hover:scale-110 active:scale-95 transition-transform cursor-pointer animate-pulse"
+                  title="Accept Call"
+                >
+                  <Phone size={24} />
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating PiP */}
       {pipHost && (
         <FloatingPiPStream
           host={pipHost}
@@ -729,7 +847,7 @@ export function App() {
         />
       )}
 
-      {/* Global Coin Rain Screen Shower Animation */}
+      {/* Global Coin Rain */}
       {isCoinRainActive && (
         <CoinRainCelebration
           poolAmount={coinRainPool}
@@ -754,7 +872,7 @@ export function App() {
         />
       )}
 
-      {/* Active 1v1 Romantic Video Call Modal */}
+      {/* Active 1v1 Video Call Modal */}
       {activeCallHost && (
         <ActiveCallModal
           host={activeCallHost}
@@ -765,7 +883,7 @@ export function App() {
         />
       )}
 
-      {/* Coin & Gem Recharge Store */}
+      {/* Recharge Modal */}
       {isRechargeModalOpen && (
         <RechargeModal
           user={currentUser}
@@ -779,7 +897,7 @@ export function App() {
         />
       )}
 
-      {/* Super-Admin Management Suite */}
+      {/* Super Admin Modal */}
       {isAdminSuiteOpen && (
         <SuperAdminModal
           user={currentUser}
@@ -792,7 +910,7 @@ export function App() {
         />
       )}
 
-      {/* 24/7 AI Support & Report Help Bot */}
+      {/* AI Support Bot */}
       {isSupportBotOpen && (
         <SupportAIBotModal
           user={currentUser}
@@ -808,7 +926,7 @@ export function App() {
         />
       )}
 
-      {/* Media Audio & Video Permissions Onboarding */}
+      {/* Media Permission Modal */}
       {mediaPermissionTargetHost && (
         <MediaPermissionModal
           mode="call"
@@ -817,7 +935,7 @@ export function App() {
         />
       )}
 
-      {/* Authentication Gateway Modal */}
+      {/* Auth Modal */}
       {isAuthModalOpen && (
         <AuthModal
           initialMode={authModalInitialMode}
@@ -826,7 +944,7 @@ export function App() {
         />
       )}
 
-      {/* 4-Step Onboarding Profile Setup */}
+      {/* Onboarding Modal */}
       {isOnboardingOpen && (
         <OnboardingModal
           user={currentUser}
@@ -836,13 +954,13 @@ export function App() {
         />
       )}
 
-      {/* Cross-Platform App Share Modal */}
+      {/* App Share Modal */}
       <AppShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
       />
 
-      {/* High-Converting Agent Commission Promotion Modal */}
+      {/* Agent Promotion Modal */}
       <AgentPromotionModal
         isOpen={isAgentPromoModalOpen}
         onClose={() => setIsAgentPromoModalOpen(false)}
@@ -863,4 +981,5 @@ export function App() {
     </div>
   );
 }
+
 export default App;
