@@ -24,7 +24,6 @@ export function usePartyAudioMesh({
   const localStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // Sync isCameraActive if initial isVideoEnabled changes
   useEffect(() => {
     setIsCameraActive(isVideoEnabled);
   }, [isVideoEnabled]);
@@ -32,7 +31,6 @@ export function usePartyAudioMesh({
   // Setup hardware mic & camera capture when user takes a seat
   useEffect(() => {
     if (userSeatIndex === null) {
-      // User left mic seat: cleanup media hardware
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
         localStreamRef.current = null;
@@ -44,10 +42,10 @@ export function usePartyAudioMesh({
       }
       setIsAudioMeshConnected(false);
       setLocalMicLevel(0);
+      setSpeakingVolumes({});
       return;
     }
 
-    // User took a seat: open audio stream (and video stream if camera active)
     let isCancelled = false;
 
     async function initMedia() {
@@ -65,7 +63,6 @@ export function usePartyAudioMesh({
               : false
           });
         } catch (mediaErr) {
-          // If video requested but failed, fallback to audio only
           if (isCameraActive) {
             stream = await navigator.mediaDevices.getUserMedia({
               audio: {
@@ -126,8 +123,8 @@ export function usePartyAudioMesh({
           animationFrameRef.current = requestAnimationFrame(analyze);
         }
       } catch (err) {
-        console.warn('[usePartyAudioMesh] Microphone access failed or denied:', err);
-        setIsAudioMeshConnected(true); // graceful fallback
+        console.warn('[usePartyAudioMesh] Microphone access denied or unavailable:', err);
+        setIsAudioMeshConnected(true);
       }
     }
 
@@ -147,7 +144,6 @@ export function usePartyAudioMesh({
     };
   }, [userSeatIndex, isMicMuted]);
 
-  // Track mic mute dynamically on audio tracks
   useEffect(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((t) => {
@@ -156,33 +152,18 @@ export function usePartyAudioMesh({
     }
   }, [isMicMuted]);
 
-  // Aggregate speaking levels across all seats in the party lounge
+  // Real-time local speaking volume tracking without dummy/random simulation
   useEffect(() => {
-    const simulationInterval = setInterval(() => {
-      const newVolumes: Record<number, number> = {};
+    if (userSeatIndex === null) {
+      setSpeakingVolumes({});
+      return;
+    }
 
-      // Host (Seat 0) has periodic natural speech modulation
-      const hostTalking = Math.random() > 0.4;
-      newVolumes[0] = hostTalking ? Math.floor(40 + Math.random() * 50) : 0;
+    setSpeakingVolumes({
+      [userSeatIndex]: isMicMuted ? 0 : localMicLevel
+    });
+  }, [userSeatIndex, localMicLevel, isMicMuted]);
 
-      // Simulated guest seats chatter occasionally
-      for (let i = 1; i <= totalSeats; i++) {
-        if (i === userSeatIndex) {
-          newVolumes[i] = isMicMuted ? 0 : localMicLevel;
-        } else {
-          // Other seats occasionally speak
-          const isSeatActive = (i % 3 === 0 && Math.random() > 0.6) || (i === 2 && Math.random() > 0.5);
-          newVolumes[i] = isSeatActive ? Math.floor(30 + Math.random() * 45) : 0;
-        }
-      }
-
-      setSpeakingVolumes(newVolumes);
-    }, 150);
-
-    return () => clearInterval(simulationInterval);
-  }, [userSeatIndex, localMicLevel, totalSeats, isMicMuted]);
-
-  // Toggle camera active state & track
   const toggleCamera = useCallback(async () => {
     const nextState = !isCameraActive;
     setIsCameraActive(nextState);
