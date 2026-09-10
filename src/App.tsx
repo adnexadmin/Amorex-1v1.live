@@ -166,7 +166,7 @@ export function App() {
     return saved ? JSON.parse(saved) : initialUTRRequests;
   });
 
-  // Sync to local storage and registered users registry
+  // 1. Persistent User Storage & Cloud Database Sync
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('amorex_user', JSON.stringify(currentUser));
@@ -178,14 +178,91 @@ export function App() {
     }
   }, [currentUser]);
 
-  // Real-time Incoming Call Listener via Firebase Firestore
+  // 2. Strict Session Restore & Permanent Login Observer (Prevents Auto-Logout)
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreSession = async () => {
+      // Restore cached local user instantly to avoid UI flicker
+      const savedUserRaw = localStorage.getItem('amorex_user');
+      if (savedUserRaw) {
+        try {
+          const localProfile = JSON.parse(savedUserRaw);
+          if (localProfile && isMounted) {
+            setCurrentUser(localProfile);
+            setIsAuthLoading(false);
+          }
+        } catch (e) {
+          console.warn('LocalStorage session restore note:', e);
+        }
+      }
+
+      // Sync Firebase Auth Session in background
+      const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+        try {
+          if (fbUser) {
+            const cloudProfile = await getUserFromFirestore(fbUser.uid);
+            if (cloudProfile && isMounted) {
+              setCurrentUser(cloudProfile);
+              localStorage.setItem('amorex_user', JSON.stringify(cloudProfile));
+              if (!cloudProfile.isOnboarded && !cloudProfile.is_super_admin) {
+                setIsOnboardingOpen(true);
+              }
+            }
+          } else {
+            // If Super Admin or local session exists, do NOT auto logout on refresh
+            const activeLocalUser = localStorage.getItem('amorex_user');
+            if (activeLocalUser) {
+              try {
+                const parsedUser: UserProfile = JSON.parse(activeLocalUser);
+                if (parsedUser.is_super_admin || parsedUser.displayId === '1000001') {
+                  if (isMounted) {
+                    setCurrentUser(parsedUser);
+                    setIsAuthLoading(false);
+                  }
+                  return;
+                }
+              } catch (err) {
+                console.warn('Local session verification error:', err);
+              }
+            }
+
+            // Trigger login modal only when no local session exists
+            if (isMounted && !localStorage.getItem('amorex_user')) {
+              setCurrentUser(null);
+              setIsAuthModalOpen(true);
+            }
+          }
+        } catch (err) {
+          console.warn('Auth state sync fallback:', err);
+        } finally {
+          if (isMounted) {
+            setIsAuthLoading(false);
+          }
+        }
+      });
+
+      return unsubscribe;
+    };
+
+    let cleanupUnsubscribe: (() => void) | undefined;
+    restoreSession().then((unsub) => {
+      cleanupUnsubscribe = unsub;
+    });
+
+    return () => {
+      isMounted = false;
+      if (cleanupUnsubscribe) cleanupUnsubscribe();
+    };
+  }, []);
+
+  // 3. Real-time Incoming Call Observer via Firebase Firestore
   useEffect(() => {
     if (!currentUser || !db) return;
 
     const myId = currentUser.id || currentUser.displayId;
     const callsCol = collection(db, 'calls');
     
-    // Listen for calls directed to this user or call rooms containing user ID
     const q = query(callsCol, where('status', '==', 'calling'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
@@ -193,7 +270,6 @@ export function App() {
           const data = change.doc.data();
           const callId = change.doc.id;
 
-          // Check if this incoming call is meant for the logged in user
           if (callId.includes(myId) && !activeCallHost) {
             sound.playCallRinging();
             setIncomingCallData({
@@ -210,7 +286,6 @@ export function App() {
     return () => unsubscribe();
   }, [currentUser, activeCallHost]);
 
-  // Handle Accept Incoming Call
   const handleAcceptIncomingCall = async () => {
     if (!incomingCallData) return;
     sound.playCallConnected();
@@ -240,7 +315,6 @@ export function App() {
     setIncomingCallData(null);
   };
 
-  // Handle Reject Incoming Call
   const handleRejectIncomingCall = async () => {
     if (!incomingCallData || !db) return;
     sound.playEndCall();
@@ -249,7 +323,7 @@ export function App() {
       const callDocRef = doc(db, 'calls', incomingCallData.callId);
       await updateDoc(callDocRef, { status: 'rejected' });
     } catch (e) {
-      console.warn('Reject call update error:', e);
+      console.warn('Reject call error:', e);
     }
 
     setIncomingCallData(null);
@@ -300,46 +374,6 @@ export function App() {
     localStorage.setItem('amorex_utr', JSON.stringify(utrRequests));
   }, [utrRequests]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const watchdog = setTimeout(() => {
-      if (isMounted) setIsAuthLoading(false);
-    }, 1200);
-
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      try {
-        if (fbUser) {
-          const profile = await getUserFromFirestore(fbUser.uid);
-          if (profile && isMounted) {
-            setCurrentUser(profile);
-            if (!profile.isOnboarded && !profile.is_super_admin) {
-              setIsOnboardingOpen(true);
-            }
-          }
-        } else {
-          if (isMounted) {
-            setCurrentUser(null);
-            localStorage.removeItem('amorex_user');
-            setIsAuthModalOpen(true);
-          }
-        }
-      } catch (e) {
-        console.warn('Auth state restore notice:', e);
-      } finally {
-        if (isMounted) {
-          clearTimeout(watchdog);
-          setIsAuthLoading(false);
-        }
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      clearTimeout(watchdog);
-      unsubscribe();
-    };
-  }, []);
-
   const handleAuthSuccess = (user: UserProfile, isNewUser: boolean = false) => {
     setCurrentUser(user);
     if (!user.is_super_admin) {
@@ -367,6 +401,7 @@ export function App() {
   const handleLogout = async () => {
     await signOutFirebaseUser();
     setCurrentUser(null);
+    localStorage.removeItem('amorex_user');
     setIsAdminSuiteOpen(false);
     setIsGiftDrawerOpen(false);
     setActiveCallHost(null);
@@ -376,6 +411,7 @@ export function App() {
     sound.playJackpotFanfare();
     const adminUser = createSuperAdminProfile(email, 'Adnex Super Admin');
     setCurrentUser(adminUser);
+    localStorage.setItem('amorex_user', JSON.stringify(adminUser));
     setIsAdminSuiteOpen(true);
   };
 
@@ -789,7 +825,7 @@ export function App() {
         unreadCount={conversations.reduce((acc, c) => acc + c.unreadCount, 0)}
       />
 
-      {/* REAL-TIME INCOMING 1V1 VIDEO CALL POPUP MODAL */}
+      {/* Real-time Incoming Call Modal */}
       <AnimatePresence>
         {incomingCallData && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xl flex items-center justify-center p-4">
