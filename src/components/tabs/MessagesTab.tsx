@@ -97,6 +97,9 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   const [isRecordingAudio, setIsRecordingAudio] = useState<boolean>(false);
   const [targetLang, setTargetLang] = useState<string>('English');
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
+  
+  // Search State for Filtering
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Global Multi-Language System & Auto-Translation State
   const [currentAppLang, setCurrentAppLang] = useState<AppLanguage>(getAppLanguage());
@@ -513,6 +516,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   onClick={() => {
                     sound.playClick();
                     setSubTab(tab);
+                    setSearchQuery(''); // Reset search when switching tabs
                   }}
                   className={`text-xs font-bold px-3.5 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
                     subTab === tab
@@ -560,11 +564,38 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
             )}
           </div>
 
+          {/* Search Bar - Visible across all list tabs */}
+          <div className="relative mt-2 mb-4">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search size={14} className="text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Name or ID..."
+              className="w-full bg-[#14162B]/80 border border-white/10 focus:border-[#FF2E93] rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none transition-colors shadow-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-pink-400"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
           {/* List Content based on SubTab */}
           {(subTab === 'Message' || subTab === 'Strangers') && (
             <div className="space-y-2.5">
               {conversationsList
                 .filter((conv) => (subTab === 'Strangers' ? conv.isStranger : !conv.isStranger))
+                .filter((conv) => 
+                  searchQuery === '' || 
+                  conv.participantName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  conv.participantDisplayId.includes(searchQuery)
+                )
                 .map((conv) => (
                   <div
                     key={conv.id}
@@ -617,6 +648,19 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                     </div>
                   </div>
                 ))}
+                
+                {/* Empty State for Search */}
+                {conversationsList
+                  .filter((conv) => (subTab === 'Strangers' ? conv.isStranger : !conv.isStranger))
+                  .filter((conv) => 
+                    searchQuery !== '' && 
+                    !conv.participantName.toLowerCase().includes(searchQuery.toLowerCase()) && 
+                    !conv.participantDisplayId.includes(searchQuery)
+                  ).length === conversationsList.filter((conv) => (subTab === 'Strangers' ? conv.isStranger : !conv.isStranger)).length && searchQuery !== '' && (
+                  <div className="text-center py-10 text-gray-400 text-xs">
+                    No results found for "{searchQuery}"
+                  </div>
+                )}
             </div>
           )}
 
@@ -627,7 +671,9 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                 { name: 'Aanya Sharma', time: 'Today, 8:45 PM', duration: '4 min 12s', coins: '240 Coins', type: 'video' },
                 { name: 'Layla Al-Mansoor', time: 'Yesterday, 10:15 PM', duration: '8 min 02s', coins: '480 Coins', type: 'video' },
                 { name: 'Zoya Khan', time: '2 days ago', duration: '2 min 30s', coins: '120 Coins', type: 'audio' }
-              ].map((call, i) => (
+              ]
+              .filter(call => searchQuery === '' || call.name.toLowerCase().includes(searchQuery.toLowerCase()))
+              .map((call, i) => (
                 <div key={i} className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400">
@@ -650,7 +696,13 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
           {/* Contacts Tab */}
           {subTab === 'Contacts' && (
             <div className="space-y-2.5">
-              {hosts.map((host) => (
+              {hosts
+                .filter(host => 
+                  searchQuery === '' || 
+                  host.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  host.displayId.includes(searchQuery)
+                )
+                .map((host) => (
                 <div key={host.id} className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <img referrerPolicy="no-referrer" src={host.avatar} alt={host.name} className="w-10 h-10 rounded-full object-cover border border-cyan-400" />
