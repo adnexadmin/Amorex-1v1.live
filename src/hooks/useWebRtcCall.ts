@@ -20,6 +20,17 @@ interface UseWebRtcCallOptions {
   onDisconnected?: () => void;
 }
 
+// Global Free Public STUN Configuration for Cross-Network Reliability
+const rtcIceServers: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
+  ]
+};
+
 export function useWebRtcCall({
   autoConnect = true,
   isVideoCall = true,
@@ -91,32 +102,50 @@ export function useWebRtcCall({
       }
     });
 
-    // Real WebRTC Signaling setup with Firebase Firestore
+    // Real WebRTC Setup with HD Audio/Video Constraints
     const setupRealWebRtcConnection = async () => {
       try {
-        const localStream = await service.getLocalMedia({ video: isVideoCall, audio: true });
+        // High-Quality Studio Audio & 720p HD Video Constraints
+        const mediaConstraints: MediaStreamConstraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: isVideoCall ? {
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
+            facingMode: 'user'
+          } : false
+        };
+
+        const localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
         setHasPermission(true);
+
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = localStream;
         }
 
-        const peerConnection = service.getPeerConnection();
-        if (!peerConnection || !db) {
-          await service.initPeerConnection(false);
-          return;
+        let peerConnection = service.getPeerConnection();
+        if (!peerConnection) {
+          peerConnection = new RTCPeerConnection(rtcIceServers);
         }
 
-        // Add local tracks to WebRTC peer connection
+        // Attach local tracks with audio-video filters to WebRTC connection
         localStream.getTracks().forEach((track) => {
-          peerConnection.addTrack(track, localStream);
+          peerConnection?.addTrack(track, localStream);
         });
 
-        // Set remote stream event
+        // Handle incoming remote audio & video tracks
         peerConnection.ontrack = (event) => {
           if (remoteVideoRef.current && event.streams[0]) {
             remoteVideoRef.current.srcObject = event.streams[0];
+            setCallState('connected');
           }
         };
+
+        if (!db) return;
 
         const targetCallId = callId || `call_${Date.now()}`;
         setActiveCallId(targetCallId);
@@ -125,7 +154,7 @@ export function useWebRtcCall({
         const calleeCandidatesCol = collection(callDocRef, 'calleeCandidates');
 
         if (isCaller) {
-          // 1. Caller registers ICE candidates
+          // 1. Caller ICE candidates
           peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
               addDoc(callerCandidatesCol, event.candidate.toJSON());
@@ -148,9 +177,10 @@ export function useWebRtcCall({
           // 3. Listen for Answer
           const unsubCall = onSnapshot(callDocRef, (snapshot) => {
             const data = snapshot.data();
-            if (data?.answer && !peerConnection.currentRemoteDescription) {
+            if (data?.answer && !peerConnection?.currentRemoteDescription) {
               const answerDescription = new RTCSessionDescription(data.answer);
-              peerConnection.setRemoteDescription(answerDescription);
+              peerConnection?.setRemoteDescription(answerDescription);
+              setCallState('connected');
             }
           });
           unsubscribersRef.current.push(unsubCall);
@@ -160,7 +190,7 @@ export function useWebRtcCall({
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
                 const candidate = new RTCIceCandidate(change.doc.data());
-                peerConnection.addIceCandidate(candidate).catch(console.warn);
+                peerConnection?.addIceCandidate(candidate).catch(console.warn);
               }
             });
           });
@@ -189,6 +219,8 @@ export function useWebRtcCall({
               },
               status: 'connected'
             });
+
+            setCallState('connected');
           }
 
           // Listen for Caller ICE candidates
@@ -196,7 +228,7 @@ export function useWebRtcCall({
             snapshot.docChanges().forEach((change) => {
               if (change.type === 'added') {
                 const candidate = new RTCIceCandidate(change.doc.data());
-                peerConnection.addIceCandidate(candidate).catch(console.warn);
+                peerConnection?.addIceCandidate(candidate).catch(console.warn);
               }
             });
           });
@@ -204,9 +236,9 @@ export function useWebRtcCall({
         }
 
       } catch (err) {
-        console.warn('[useWebRtcCall] WebRTC Signaling Error:', err);
+        console.warn('[useWebRtcCall] WebRTC Media/Signaling Error:', err);
         setHasPermission(false);
-        setPermissionError('Could not acquire direct media stream or signaling channel.');
+        setPermissionError('Could not acquire direct studio media stream or signaling channel.');
       }
     };
 
@@ -306,6 +338,7 @@ export function useWebRtcCall({
     }
     unsubscribersRef.current.forEach((unsub) => unsub());
     unsubscribersRef.current = [];
+    setCallState('closed');
   }, []);
 
   return {
