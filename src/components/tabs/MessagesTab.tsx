@@ -46,49 +46,9 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   onOpenGiftDrawer,
   onSendMessage
 }) => {
+  // Completely empty list for clean real user sync (No dummy Siddharth or Elena)
   const [conversationsList, setConversationsList] = useState<ChatConversation[]>([
-    ...initialConversations,
-    // Add default Strangers conversation
-    {
-      id: 'stranger-1',
-      participantId: 'stranger-user-99',
-      participantDisplayId: '94827104',
-      participantName: 'Siddharth_Roy',
-      participantAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-      isOnline: true,
-      isStranger: true,
-      lastMessage: 'Hey! Loved your profile on 1v1 Radar. Would love to connect 💫',
-      lastMessageTime: '10m ago',
-      unreadCount: 1,
-      messages: [
-        {
-          id: 'smsg-1',
-          senderId: 'stranger-user-99',
-          text: 'Hey! Loved your profile on 1v1 Radar. Would love to connect 💫',
-          timestamp: '10m ago'
-        }
-      ]
-    },
-    {
-      id: 'stranger-2',
-      participantId: 'stranger-user-98',
-      participantDisplayId: '63910482',
-      participantName: 'Elena_Vip',
-      participantAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-      isOnline: false,
-      isStranger: true,
-      lastMessage: 'Are you coming to the Dubai lounge party tonight? 🥂',
-      lastMessageTime: '1h ago',
-      unreadCount: 2,
-      messages: [
-        {
-          id: 'smsg-2',
-          senderId: 'stranger-user-98',
-          text: 'Are you coming to the Dubai lounge party tonight? 🥂',
-          timestamp: '1h ago'
-        }
-      ]
-    }
+    ...initialConversations
   ]);
 
   const [subTab, setSubTab] = useState<'Message' | 'Strangers' | 'Call' | 'Contacts'>('Message');
@@ -132,7 +92,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Trigger inline translation
   const handleTranslate = async (msgId: string, text: string) => {
     sound.playClick();
     if (translatedMessages[msgId]) {
@@ -239,14 +198,12 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   const strangersCount = conversationsList.filter((c) => c.isStranger).reduce((acc, c) => acc + c.unreadCount, 0);
   const friendsCount = conversationsList.filter((c) => !c.isStranger).reduce((acc, c) => acc + c.unreadCount, 0);
 
-  // Find host for active chat if matching
   const matchingHost = activeChat
     ? hosts.find((h) => h.name.toLowerCase() === activeChat.participantName.toLowerCase()) || hosts[0]
     : null;
 
   return (
     <div className="pb-24 pt-2 max-w-4xl mx-auto px-3 sm:px-4 space-y-4">
-      {/* Hidden File Input for Custom Uploads */}
       <input
         ref={fileInputRef}
         type="file"
@@ -262,14 +219,12 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
         }}
       />
 
-      {/* If Inside Active Chat View */}
       {activeChat ? (
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="rounded-3xl bg-[#14162B]/95 border border-pink-500/30 overflow-hidden shadow-2xl flex flex-col h-[75vh]"
         >
-          {/* Chat Header */}
           <div className="p-3.5 bg-black/40 border-b border-white/10 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -307,9 +262,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
               </div>
             </div>
 
-            {/* Header Call & Language Controls */}
             <div className="flex items-center gap-2">
-              {/* Auto-Translation Quick Toggle */}
               <button
                 type="button"
                 onClick={() => {
@@ -342,12 +295,10 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
             </div>
           </div>
 
-          {/* Messages Feed */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {activeChat.messages.map((msg) => {
               const isMe = msg.senderId === user.id;
               const isShowingOriginal = !!showOriginalMap[msg.id];
-              // 100% Perfect Chat Auto-Translation into receiver's current app language
               const autoResult = (!isMe && autoTranslateEnabled) ? autoTranslateText(msg.text, currentAppLang) : null;
               const isAutoTranslated = !!(autoResult && autoResult.isTranslated && !isShowingOriginal);
               const displayText = isAutoTranslated ? autoResult.translatedText : msg.text;
@@ -365,7 +316,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                         : 'bg-white/10 text-gray-100 rounded-bl-none border border-white/5'
                     }`}
                   >
-                    {/* If Media Attachment exists */}
                     {msg.mediaUrl && (
                       <div className="mb-2 rounded-xl overflow-hidden border border-white/10 bg-black/40">
                         {msg.type === 'video' ? (
@@ -386,7 +336,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                       </div>
                     )}
 
-                    {/* Small 'Translated' Badge when auto-translated */}
                     {isAutoTranslated && (
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black bg-cyan-400/20 text-cyan-300 border border-cyan-400/40 shadow-xs">
@@ -396,10 +345,8 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                       </div>
                     )}
 
-                    {/* Message Text */}
                     <p className="leading-relaxed whitespace-pre-wrap">{displayText}</p>
 
-                    {/* Auto-Translation Toggle: Show Original / Show Translated */}
                     {autoResult && autoResult.isTranslated && !isMe && (
                       <button
                         type="button"
@@ -414,7 +361,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                       </button>
                     )}
 
-                    {/* AI Translation Overlay (Manual translation fallback) */}
                     {hasTranslation && !isAutoTranslated && (
                       <div className="mt-1.5 pt-1.5 border-t border-white/20 text-[11px] text-cyan-200 font-medium">
                         <span className="text-[9px] text-cyan-400 font-bold block">🌐 {targetLang} Translation:</span>
@@ -422,7 +368,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                       </div>
                     )}
 
-                    {/* Inline Manual Translate Action Button if auto-translate off */}
                     {!isMe && !autoTranslateEnabled && (
                       <button
                         onClick={() => handleTranslate(msg.id, msg.text)}
@@ -434,7 +379,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                       </button>
                     )}
 
-                    {/* Timestamp & Read ticks */}
                     <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-white/60">
                       <span>{msg.timestamp}</span>
                       {isMe && <CheckCheck size={11} className="text-cyan-300" />}
@@ -445,9 +389,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
             })}
           </div>
 
-          {/* Chat Input Bar with Media Attachment & Voice Controls */}
           <form onSubmit={handleSend} className="p-3 bg-black/50 border-t border-white/10 flex items-center gap-2">
-            {/* Gift Button */}
             <button
               type="button"
               onClick={() => {
@@ -459,7 +401,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
               <Gift size={16} />
             </button>
 
-            {/* Media Attachment Button */}
             <button
               type="button"
               onClick={() => {
@@ -472,7 +413,6 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
               <ImageIcon size={16} />
             </button>
 
-            {/* Voice Note Recorder Button */}
             <button
               type="button"
               onClick={() => {
@@ -486,16 +426,14 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
               <Mic size={16} />
             </button>
 
-            {/* Text Input */}
             <input
               type="text"
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
-              placeholder="Send a romantic message or attach media..."
+              placeholder="Send a message or attach media..."
               className="flex-1 bg-[#090A15] border border-white/15 focus:border-[#FF2E93] rounded-full px-4 py-2 text-xs text-white placeholder-gray-500 focus:outline-none"
             />
 
-            {/* Send Button */}
             <button
               type="submit"
               className="w-9 h-9 rounded-full bg-[#FF2E93] hover:bg-pink-600 text-white flex items-center justify-center shadow-md shrink-0 transition-transform hover:scale-105"
@@ -505,9 +443,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
           </form>
         </motion.div>
       ) : (
-        /* Conversation List View */
         <div className="space-y-4">
-          {/* Sub-Tabs Header */}
           <div className="flex items-center justify-between border-b border-white/10 pb-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               {(['Message', 'Strangers', 'Call', 'Contacts'] as const).map((tab) => (
@@ -516,7 +452,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   onClick={() => {
                     sound.playClick();
                     setSubTab(tab);
-                    setSearchQuery(''); // Reset search when switching tabs
+                    setSearchQuery('');
                   }}
                   className={`text-xs font-bold px-3.5 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
                     subTab === tab
@@ -564,7 +500,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
             )}
           </div>
 
-          {/* Search Bar - Visible across all list tabs */}
+          {/* Search Bar */}
           <div className="relative mt-2 mb-4">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={14} className="text-gray-400" />
@@ -586,142 +522,120 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
             )}
           </div>
 
-          {/* List Content based on SubTab */}
           {(subTab === 'Message' || subTab === 'Strangers') && (
             <div className="space-y-2.5">
-              {conversationsList
-                .filter((conv) => (subTab === 'Strangers' ? conv.isStranger : !conv.isStranger))
-                .filter((conv) => 
-                  searchQuery === '' || 
-                  conv.participantName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                  conv.participantDisplayId.includes(searchQuery)
-                )
-                .map((conv) => (
-                  <div
-                    key={conv.id}
-                    onClick={() => {
-                      sound.playClick();
-                      setActiveChat(conv);
-                    }}
-                    className="p-3.5 rounded-2xl bg-[#14162B]/85 hover:bg-[#1C1E3A] border border-white/10 hover:border-pink-500/40 transition-all cursor-pointer flex items-center justify-between gap-3 shadow-md group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-pink-500/50">
-                        <img
-                          referrerPolicy="no-referrer"
-                          src={conv.participantAvatar}
-                          alt={conv.participantName}
-                          className="w-full h-full object-cover"
-                        />
-                        {conv.isOnline && (
-                          <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#090A15]" />
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-white group-hover:text-pink-300 transition-colors">
-                            {conv.participantName}
-                          </h4>
-                          {conv.isGroup && (
-                            <span className="text-[9px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.5 rounded">
-                              Group
-                            </span>
-                          )}
-                          <span className="text-[10px] text-gray-500 font-mono">
-                            ID: {conv.participantDisplayId}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-300 truncate max-w-xs sm:max-w-md mt-0.5">
-                          {conv.lastMessage}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <span className="text-[10px] text-gray-400">{conv.lastMessageTime}</span>
-                      {conv.unreadCount > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[#FF2E93] text-white text-[10px] font-black flex items-center justify-center shadow-sm">
-                          {conv.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Empty State for Search */}
-                {conversationsList
+              {conversationsList.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 text-xs">
+                  No active conversations yet. Real user chats will appear here.
+                </div>
+              ) : (
+                conversationsList
                   .filter((conv) => (subTab === 'Strangers' ? conv.isStranger : !conv.isStranger))
                   .filter((conv) => 
-                    searchQuery !== '' && 
-                    !conv.participantName.toLowerCase().includes(searchQuery.toLowerCase()) && 
-                    !conv.participantDisplayId.includes(searchQuery)
-                  ).length === conversationsList.filter((conv) => (subTab === 'Strangers' ? conv.isStranger : !conv.isStranger)).length && searchQuery !== '' && (
-                  <div className="text-center py-10 text-gray-400 text-xs">
-                    No results found for "{searchQuery}"
-                  </div>
-                )}
+                    searchQuery === '' || 
+                    conv.participantName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                    conv.participantDisplayId.includes(searchQuery)
+                  )
+                  .map((conv) => (
+                    <div
+                      key={conv.id}
+                      onClick={() => {
+                        sound.playClick();
+                        setActiveChat(conv);
+                      }}
+                      className="p-3.5 rounded-2xl bg-[#14162B]/85 hover:bg-[#1C1E3A] border border-white/10 hover:border-pink-500/40 transition-all cursor-pointer flex items-center justify-between gap-3 shadow-md group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-pink-500/50">
+                          <img
+                            referrerPolicy="no-referrer"
+                            src={conv.participantAvatar}
+                            alt={conv.participantName}
+                            className="w-full h-full object-cover"
+                          />
+                          {conv.isOnline && (
+                            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#090A15]" />
+                          )}
+                        </div>
+
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white group-hover:text-pink-300 transition-colors">
+                              {conv.participantName}
+                            </h4>
+                            {conv.isGroup && (
+                              <span className="text-[9px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.5 rounded">
+                                Group
+                              </span>
+                            )}
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              ID: {conv.participantDisplayId}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-300 truncate max-w-xs sm:max-w-md mt-0.5">
+                            {conv.lastMessage}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <span className="text-[10px] text-gray-400">{conv.lastMessageTime}</span>
+                        {conv.unreadCount > 0 && (
+                          <span className="w-5 h-5 rounded-full bg-[#FF2E93] text-white text-[10px] font-black flex items-center justify-center shadow-sm">
+                            {conv.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+              )}
             </div>
           )}
 
-          {/* Calls History Tab */}
+          {/* Real Clean Calls History Tab */}
           {subTab === 'Call' && (
             <div className="space-y-2.5">
-              {[
-                { name: 'Aanya Sharma', time: 'Today, 8:45 PM', duration: '4 min 12s', coins: '240 Coins', type: 'video' },
-                { name: 'Layla Al-Mansoor', time: 'Yesterday, 10:15 PM', duration: '8 min 02s', coins: '480 Coins', type: 'video' },
-                { name: 'Zoya Khan', time: '2 days ago', duration: '2 min 30s', coins: '120 Coins', type: 'audio' }
-              ]
-              .filter(call => searchQuery === '' || call.name.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map((call, i) => (
-                <div key={i} className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center text-pink-400">
-                      <PhoneCall size={18} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">{call.name}</h4>
-                      <p className="text-[10px] text-gray-400">{call.time} • {call.duration}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs font-bold text-amber-300">{call.coins}</span>
-                    <span className="text-[10px] text-emerald-400 block">Completed</span>
-                  </div>
-                </div>
-              ))}
+              <div className="text-center py-12 text-gray-500 text-xs">
+                No call history yet. Real 1v1 video & voice calls will display here.
+              </div>
             </div>
           )}
 
           {/* Contacts Tab */}
           {subTab === 'Contacts' && (
             <div className="space-y-2.5">
-              {hosts
-                .filter(host => 
-                  searchQuery === '' || 
-                  host.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                  host.displayId.includes(searchQuery)
-                )
-                .map((host) => (
-                <div key={host.id} className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <img referrerPolicy="no-referrer" src={host.avatar} alt={host.name} className="w-10 h-10 rounded-full object-cover border border-cyan-400" />
-                    <div>
-                      <h4 className="text-xs font-bold text-white">{host.name}</h4>
-                      <p className="text-[10px] text-gray-400">ID: {host.displayId} • {host.region}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      sound.playClick();
-                      onStart1v1Call(host);
-                    }}
-                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-xs font-bold shadow-sm hover:scale-105 transition-transform"
-                  >
-                    1v1 Call
-                  </button>
+              {hosts.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 text-xs">
+                  No registered contacts online right now.
                 </div>
-              ))}
+              ) : (
+                hosts
+                  .filter(host => 
+                    searchQuery === '' || 
+                    host.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                    host.displayId.includes(searchQuery)
+                  )
+                  .map((host) => (
+                    <div key={host.id} className="p-3 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <img referrerPolicy="no-referrer" src={host.avatar} alt={host.name} className="w-10 h-10 rounded-full object-cover border border-cyan-400" />
+                        <div>
+                          <h4 className="text-xs font-bold text-white">{host.name}</h4>
+                          <p className="text-[10px] text-gray-400">ID: {host.displayId} • {host.region}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          sound.playClick();
+                          onStart1v1Call(host);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white text-xs font-bold shadow-sm hover:scale-105 transition-transform"
+                      >
+                        1v1 Call
+                      </button>
+                    </div>
+                  ))
+              )}
             </div>
           )}
         </div>
@@ -773,33 +687,12 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   <span className="text-[10px] text-gray-400">Short video clip</span>
                 </button>
               </div>
-
-              {/* Romantic Preset Wallpapers / Stickers */}
-              <div className="space-y-1.5 pt-2">
-                <span className="text-[11px] font-bold text-gray-300">Romantic Quick Snaps:</span>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=300&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=300&auto=format&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1522673607200-164d1b6ce486?w=300&auto=format&fit=crop&q=80'
-                  ].map((presetUrl, idx) => (
-                    <img
-                      key={idx}
-                      referrerPolicy="no-referrer"
-                      src={presetUrl}
-                      alt="preset"
-                      onClick={() => handleSendMediaMessage(presetUrl, 'image')}
-                      className="h-16 w-full rounded-xl object-cover border border-white/10 hover:border-pink-400 cursor-pointer hover:scale-105 transition-transform"
-                    />
-                  ))}
-                </div>
-              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* MEDIA PREVIEW & CONFIRMATION MODAL */}
+      {/* MEDIA PREVIEW MODAL */}
       <AnimatePresence>
         {previewMedia && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
@@ -879,7 +772,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                     required
                     value={groupTitle}
                     onChange={(e) => setGroupTitle(e.target.value)}
-                    placeholder="e.g. Dubai VIP Lovers Club 🥂"
+                    placeholder="e.g. Friends Lounge 🥂"
                     className="w-full bg-[#090A15] border border-white/15 focus:border-[#00D2FF] rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none"
                   />
                 </div>
