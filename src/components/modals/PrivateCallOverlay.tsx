@@ -4,6 +4,7 @@ import { sound } from '../../utils/audio';
 import { useWebRtcCall } from '../../hooks/useWebRtcCall';
 import { RomanticOverlaysLayer } from '../common/RomanticOverlaysLayer';
 import { VideoFilterDrawer } from './VideoFilterDrawer';
+import { getVideoFilterCSS, FILTER_PRESETS } from '../common/VideoFilters';
 import { ReportUserModal } from './ReportUserModal';
 import {
   Mic,
@@ -13,6 +14,7 @@ import {
   PhoneOff,
   Gift,
   Wand2,
+  Sparkles,
   SwitchCamera,
   Volume2,
   VolumeX,
@@ -37,14 +39,35 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
   onDeductCoins
 }) => {
   const [callDuration, setCallDuration] = useState<number>(0);
-  const [videoFilter, setVideoFilter] = useState<VideoFilterType>('heart-aura');
-  const [filterIntensity, setFilterIntensity] = useState<number>(100);
+  const [isBeautyActive, setIsBeautyActive] = useState<boolean>(true);
+  const [videoFilter, setVideoFilter] = useState<VideoFilterType>('beauty-mode');
+  const [filterIntensity, setFilterIntensity] = useState<number>(85);
   const [filterTarget, setFilterTarget] = useState<'host' | 'self' | 'both'>('both');
   const [showOverlays, setShowOverlays] = useState<boolean>(true);
   const [showFilterDrawer, setShowFilterDrawer] = useState<boolean>(false);
   const [isComparing, setIsComparing] = useState<boolean>(false);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState<boolean>(false);
+
+  // Compute real-time CSS filter based on beauty toggle and active preset
+  const activeFilterCSS = useMemo(() => {
+    if (!isBeautyActive || isComparing) return 'none';
+    return getVideoFilterCSS(videoFilter, filterIntensity);
+  }, [isBeautyActive, isComparing, videoFilter, filterIntensity]);
+
+  const remoteFilterStyle = useMemo(() => {
+    if (filterTarget === 'host' || filterTarget === 'both') {
+      return { filter: activeFilterCSS, transition: 'filter 0.25s ease' };
+    }
+    return { filter: 'none' };
+  }, [filterTarget, activeFilterCSS]);
+
+  const localFilterStyle = useMemo(() => {
+    if (filterTarget === 'self' || filterTarget === 'both') {
+      return { filter: activeFilterCSS, transition: 'filter 0.25s ease' };
+    }
+    return { filter: 'none' };
+  }, [filterTarget, activeFilterCSS]);
 
   const connectedAtRef = useRef<number | null>(null);
   const chargedSlabsRef = useRef<Set<number>>(new Set());
@@ -192,7 +215,8 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
           autoPlay
           playsInline
           muted={isSpeakerMuted}
-          className="w-full h-full object-cover"
+          style={remoteFilterStyle}
+          className="w-full h-full object-cover transition-[filter] duration-300"
         />
 
         {callState !== 'connected' && (
@@ -217,17 +241,35 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
 
       {/* 2. Top Header with Real-time Multiplier Status */}
       <header className="relative z-20 w-full max-w-5xl px-4 pt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-xl rounded-full py-1.5 px-3 border border-white/20 shadow-xl">
-          <img
-            referrerPolicy="no-referrer"
-            src={host?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-            alt={host?.name}
-            className="w-9 h-9 rounded-full object-cover border-2 border-[#FF2E93]"
-          />
-          <div>
-            <h3 className="text-xs sm:text-sm font-black text-white leading-none">{host?.name}</h3>
-            <p className="text-[10px] text-pink-300 font-mono mt-0.5">ID: {host?.displayId}</p>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-xl rounded-full py-1.5 px-3 border border-white/20 shadow-xl">
+            <img
+              referrerPolicy="no-referrer"
+              src={host?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+              alt={host?.name}
+              className="w-9 h-9 rounded-full object-cover border-2 border-[#FF2E93]"
+            />
+            <div>
+              <h3 className="text-xs sm:text-sm font-black text-white leading-none">{host?.name}</h3>
+              <p className="text-[10px] text-pink-300 font-mono mt-0.5">ID: {host?.displayId}</p>
+            </div>
           </div>
+
+          {/* Real-time Beauty Filter Status Badge */}
+          <button
+            onClick={() => {
+              sound.playClick();
+              setIsBeautyActive((prev) => !prev);
+            }}
+            className={`self-start cursor-pointer transition-all duration-300 px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 border backdrop-blur-md shadow-md ${
+              isBeautyActive
+                ? 'bg-pink-500/30 border-pink-400/60 text-pink-200 hover:bg-pink-500/40'
+                : 'bg-black/40 border-white/20 text-gray-400 hover:bg-black/60'
+            }`}
+          >
+            <Sparkles size={11} className={isBeautyActive ? 'text-amber-300 animate-pulse' : 'text-gray-500'} />
+            <span>Beauty: {isBeautyActive ? (FILTER_PRESETS.find(p => p.id === videoFilter)?.name || 'ON') : 'OFF'}</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -251,13 +293,14 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
       </header>
 
       {/* 3. Floating User Camera (Picture-in-Picture) */}
-      <div className="absolute top-20 right-4 z-30 w-32 sm:w-40 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-pink-400/80 shadow-2xl bg-slate-900">
+      <div className="absolute top-24 right-4 z-30 w-32 sm:w-40 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-pink-400/80 shadow-2xl bg-slate-900">
         <video
           ref={localVideoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover scale-x-[-1]"
+          style={localFilterStyle}
+          className="w-full h-full object-cover scale-x-[-1] transition-[filter] duration-300"
         />
         {isVideoOff && (
           <div className="absolute inset-0 bg-gray-900 flex flex-col items-center justify-center text-gray-400 text-xs">
@@ -293,9 +336,30 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
           {isVideoOff ? <VideoOff size={20} /> : <VideoIcon size={20} />}
         </button>
 
+        {/* Real-time Beauty Filter Toggle Button */}
+        <button
+          onClick={() => {
+            sound.playClick();
+            setIsBeautyActive((prev) => !prev);
+          }}
+          title={isBeautyActive ? 'Beauty Filter ON (Tap to toggle OFF)' : 'Beauty Filter OFF (Tap to enable)'}
+          className={`w-12 h-12 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ${
+            isBeautyActive
+              ? 'bg-gradient-to-tr from-[#FF2E93] via-pink-500 to-amber-400 text-white shadow-[0_0_18px_rgba(255,46,147,0.7)] border-2 border-pink-300 scale-105'
+              : 'bg-white/20 border border-white/30 text-gray-300 hover:text-white'
+          }`}
+        >
+          <Sparkles size={18} className={isBeautyActive ? 'animate-pulse text-yellow-200' : ''} />
+          <span className="text-[7.5px] font-black leading-none mt-0.5 tracking-tight uppercase">
+            {isBeautyActive ? 'Beauty' : 'Off'}
+          </span>
+        </button>
+
+        {/* Detailed Filter & Presets Drawer */}
         <button
           onClick={() => setShowFilterDrawer(true)}
-          className="w-12 h-12 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-pink-300 cursor-pointer"
+          title="Video Filter Drawer & Presets"
+          className="w-12 h-12 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-pink-300 hover:text-white cursor-pointer"
         >
           <Wand2 size={20} />
         </button>

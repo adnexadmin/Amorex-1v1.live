@@ -232,7 +232,7 @@ export const uploadAvatarAndSync = async (
     });
 
     const updatedUser = updateUserProfile({
-      userId,
+      id: userId,
       avatar: downloadUrl,
       avatarUrl: downloadUrl
     });

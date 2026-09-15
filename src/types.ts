@@ -75,6 +75,8 @@ export interface UserProfile {
   registrationMethod?: 'email' | 'phone' | 'google' | 'guest';
   username?: string;
   isOnboarded?: boolean;
+  visitorsCount?: number;
+  likesCount?: number;
   city?: string;
   country?: string;
   latitude?: number;
@@ -112,10 +114,14 @@ export interface StreamHost {
   viewerCount: number;
   bio: string;
   ratePerMin: number; // in coins (default 60)
+  coinRatePerMin?: number; // alias for ratePerMin
   callStatus: 'available' | 'in_call' | 'busy';
   greetingAudio?: string;
   languages?: string[];
   primaryLanguage?: string;
+  isPrivate?: boolean;
+  followersCount?: number;
+  likesCount?: number;
 }
 
 export interface MomentPost {
@@ -209,6 +215,10 @@ export interface ChatConversation {
   participantDisplayId: string;
   participantName: string;
   participantAvatar: string;
+  hostId?: string;
+  hostDisplayId?: string;
+  hostName?: string;
+  hostAvatar?: string;
   isOnline: boolean;
   isStranger?: boolean;
   isGroup?: boolean;
@@ -310,6 +320,20 @@ export type VideoFilterType =
   | 'golden-hour'
   | 'cherry-blossom'
   | 'vintage-noir';
+
+export type BeautyPresetType = 'natural' | 'rosy' | 'porcelain' | 'glow' | 'glamour' | 'custom';
+
+export interface BeautyFilterSettings {
+  enabled: boolean;
+  preset: BeautyPresetType;
+  brightness: number; // 90 to 150 (%)
+  saturation: number; // 90 to 160 (%)
+  contrast: number;   // 90 to 120 (%)
+  smoothness: number; // 0 to 100 (%) -> maps to 0 to 0.7px blur
+  warmth: number;     // 0 to 100 (%) -> maps to subtle sepia & hue shift
+  overlayGlow: boolean; // Soft lighting vignette overlay
+  target: 'self' | 'both' | 'host';
+}
 
 export interface CallHistoryItem {
   id: string;
@@ -503,6 +527,25 @@ export interface CPGiftItem {
   intimacyValue: number;
   animationKey?: string;
   description: string;
+}
+
+export interface UserEngagementMetrics {
+  sessionId: string;
+  userId?: string;
+  userDisplayId?: string;
+  userName?: string;
+  userEmail?: string;
+  role?: string;
+  sessionStartTime: number; // Unix timestamp in ms
+  lastActiveTime: number; // Unix timestamp in ms
+  sessionDurationSeconds: number;
+  currentTab: NavigationTab | string;
+  tabNavigationFrequency: Record<string, number>;
+  totalTabSwitches: number;
+  devicePlatform?: string;
+  userAgent?: string;
+  isOnline: boolean;
+  updatedAt: string; // ISO 8601 string
 }
 
 

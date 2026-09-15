@@ -52,6 +52,30 @@
         "createdAt": { "type": "string" }
       },
       "required": ["userId", "username"]
+    },
+    "AnalyticsSession": {
+      "title": "AnalyticsSession",
+      "description": "User engagement metrics including session duration, tab navigation frequencies, and client metadata",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userDisplayId": { "type": "string", "maxLength": 64 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userEmail": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 32 },
+        "sessionStartTime": { "type": "number" },
+        "lastActiveTime": { "type": "number" },
+        "sessionDurationSeconds": { "type": "number" },
+        "currentTab": { "type": "string", "maxLength": 32 },
+        "tabNavigationFrequency": { "type": "object" },
+        "totalTabSwitches": { "type": "number" },
+        "devicePlatform": { "type": "string", "maxLength": 64 },
+        "userAgent": { "type": "string", "maxLength": 500 },
+        "isOnline": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["sessionId", "sessionDurationSeconds", "tabNavigationFrequency", "totalTabSwitches"]
     }
   },
   "firestore": {
@@ -66,6 +90,10 @@
     "/usernames/{username}": {
       "schema": "UsernameRecord",
       "description": "Global unique username lookup documents"
+    },
+    "/analytics/{sessionId}": {
+      "schema": "AnalyticsSession",
+      "description": "Real-time user engagement telemetry and navigation frequency metrics"
     }
   }
 }

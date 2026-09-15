@@ -192,7 +192,7 @@ export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({
 
     // Push update to storage/database
     const updated = updateUserProfile({
-      userId: user.id,
+      id: user.id,
       name: nickname.trim(),
       avatar,
       coverPhoto,

@@ -36,6 +36,7 @@ import { GuestSeatModal } from '../party/GuestSeatModal';
 import { InRoomGamesDrawer } from '../party/InRoomGamesDrawer';
 import { TopGiftersModal } from '../party/TopGiftersModal';
 import { ReportUserModal, ReportTargetInfo } from '../modals/ReportUserModal';
+import { EmptyState } from '../common/EmptyState';
 import { autoTranslateText } from '../../utils/translate';
 import { getAppLanguage, AppLanguage, SUPPORTED_LANGUAGES, t } from '../../utils/i18n';
 
@@ -56,27 +57,14 @@ export const PartyTab: React.FC<PartyTabProps> = ({
   onAddCoins,
   onOpenRecharge
 }) => {
-  const [selectedRoom, setSelectedRoom] = useState<PartyRoom>(rooms?.[0] || {
-    id: 'room-101',
-    displayId: '99201948',
-    title: '💖 Bollywood Karaoke Night & Romantic Lounge',
-    hostId: 'host-1',
-    hostName: 'Aanya Sharma',
-    hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-    coverImage: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&auto=format&fit=crop&q=80',
-    category: 'Chat',
-    seats: [],
-    mode: 'audio',
-    wallpaper: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800&auto=format&fit=crop&q=80',
-    bgmPlaying: false,
-    bgmGenre: 'Romantic',
-    isLocked: false,
-    onlineCount: 4280,
-    viewerCount: 4280,
-    tag: 'Bollywood',
-    tags: ['Karaoke', 'Bollywood', '12Seats'],
-    region: 'India'
-  });
+  const [selectedRoom, setSelectedRoom] = useState<PartyRoom | null>(() => rooms?.[0] || null);
+
+  useEffect(() => {
+    if (rooms && rooms.length > 0 && !selectedRoom) {
+      setSelectedRoom(rooms[0]);
+    }
+  }, [rooms, selectedRoom]);
+
   const [seatLayoutMode, setSeatLayoutMode] = useState<'6' | '9' | '12'>('12');
   const [groupCallViewMode, setGroupCallViewMode] = useState<'VOICE' | 'VIDEO'>('VOICE');
   const [userSeatIndex, setUserSeatIndex] = useState<number | null>(null);
@@ -131,11 +119,7 @@ export const PartyTab: React.FC<PartyTabProps> = ({
     text: string;
     isHost?: boolean;
     isGift?: boolean;
-  }>>([
-    { id: '1', sender: selectedRoom.hostName, level: 32, text: 'Welcome to the 12-Seat VIP Party Room! 💖 Grab a mic!', isHost: true },
-    { id: '2', sender: 'CrownKing', level: 45, text: 'Hey everyone! Playing Champ Car racing 🏎️' },
-    { id: '3', sender: 'Aanya_Lover', level: 19, text: 'Sent 10x Passion Roses to Host! 🌹', isGift: true }
-  ]);
+  }>>([]);
   const [chatInput, setChatInput] = useState<string>('');
 
   // Party Chat Auto-Translation
@@ -165,18 +149,13 @@ export const PartyTab: React.FC<PartyTabProps> = ({
     avatar: string;
     level: number;
     coinsContributed: number;
-  }>>([
-    { userId: 'u-1', name: 'CrownKing', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', level: 45, coinsContributed: 18500 },
-    { userId: 'u-2', name: 'Layla_DXB', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', level: 24, coinsContributed: 12400 },
-    { userId: 'u-3', name: 'PrinceAli', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', level: 18, coinsContributed: 8900 },
-    { userId: 'u-4', name: 'Aanya_Lover', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', level: 19, coinsContributed: 4500 },
-    { userId: 'u-5', name: 'Farhan_Vibes', avatar: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150', level: 15, coinsContributed: 2300 }
-  ]);
+  }>>([]);
   const [isTopGiftersModalOpen, setIsTopGiftersModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setTopGifters((prev) => {
+        if (prev.length === 0) return prev;
         const gifterIndex = Math.floor(Math.random() * prev.length);
         const boost = Math.floor(Math.random() * 5) * 300 + 200;
         const updated = [...prev];
@@ -197,21 +176,14 @@ export const PartyTab: React.FC<PartyTabProps> = ({
   const [isBgmPlaying, setIsBgmPlaying] = useState<boolean>(true);
   const [bgmTrack, setBgmTrack] = useState<string>('Romantic Chill Lounge');
 
-  // Simulated Occupied Guests for 12 seats
-  const guestSeatsData = [
-    { seat: 1, name: selectedRoom.hostName, avatar: selectedRoom.hostAvatar, level: 32, isHost: true },
-    { seat: 2, name: 'Layla_DXB', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', level: 24 },
-    { seat: 3, name: 'PrinceAli', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', level: 18 },
-    { seat: 4, name: 'Aanya_Sing', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', level: 29 },
-    { seat: 5, name: null, avatar: null, level: 0 },
-    { seat: 6, name: null, avatar: null, level: 0 },
-    { seat: 7, name: 'Farhan_Vibes', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', level: 15 },
-    { seat: 8, name: null, avatar: null, level: 0 },
-    { seat: 9, name: null, avatar: null, level: 0 },
-    { seat: 10, name: null, avatar: null, level: 0 },
-    { seat: 11, name: null, avatar: null, level: 0 },
-    { seat: 12, name: null, avatar: null, level: 0 }
-  ];
+  // Occupied Guests for 12 seats (starts clean with only host if room is active)
+  const guestSeatsData = selectedRoom
+    ? Array.from({ length: 12 }, (_, i) =>
+        i === 0
+          ? { seat: 1, name: selectedRoom.hostName, avatar: selectedRoom.hostAvatar, level: 32, isHost: true }
+          : { seat: i + 1, name: null, avatar: null, level: 0 }
+      )
+    : [];
 
   // 54-Second Countdown Lucky Bonus Chest loop
   useEffect(() => {
@@ -313,6 +285,24 @@ export const PartyTab: React.FC<PartyTabProps> = ({
     setUserSeatIndex(null);
     setIsMicMuted(true);
   };
+
+  if (rooms.length === 0 || !selectedRoom) {
+    return (
+      <div className="pb-24 max-w-6xl mx-auto px-2.5 sm:px-6">
+        <EmptyState
+          icon={Users}
+          title="No party rooms active right now"
+          description="The party lounges are currently quiet. Be the first to start a party room to host karaoke, music, and group games!"
+          badge="Party Hangout"
+          actionLabel="Refresh Lounges"
+          onAction={() => window.location.reload()}
+          secondaryActionLabel="Check Back Soon"
+          onSecondaryAction={() => {}}
+          colorScheme="cyan"
+        />
+      </div>
+    );
+  }
 
   const isFollowed = followedGroups[selectedRoom.id];
 

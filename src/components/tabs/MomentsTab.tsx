@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MomentLightboxModal } from '../modals/MomentLightboxModal';
+import { EmptyState } from '../common/EmptyState';
 
 interface MomentsTabProps {
   posts: MomentPost[];
@@ -174,32 +175,24 @@ export const MomentsTab: React.FC<MomentsTabProps> = ({
           </div>
           <span className="text-[10px] text-gray-300 font-medium truncate w-14 text-center">Add Story</span>
         </div>
-
-        {/* Other Streamers Stories */}
-        {[
-          { name: 'Aanya', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80' },
-          { name: 'Layla', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80' },
-          { name: 'Zoya', avatar: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&auto=format&fit=crop&q=80' },
-          { name: 'Nusrat', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&auto=format&fit=crop&q=80' },
-          { name: 'Kabir', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80' }
-        ].map((story, i) => (
-          <div key={i} className="flex flex-col items-center gap-1 cursor-pointer shrink-0">
-            <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-[#FF2E93] via-[#FFD700] to-[#00D2FF]">
-              <img
-                referrerPolicy="no-referrer"
-                src={story.avatar}
-                alt={story.name}
-                className="w-full h-full rounded-full object-cover border-2 border-[#090A15]"
-              />
-            </div>
-            <span className="text-[10px] text-gray-300 font-medium truncate w-14 text-center">{story.name}</span>
-          </div>
-        ))}
       </div>
 
       {/* Feed Posts */}
       <section className="space-y-4">
-        {filteredPosts.map((post) => (
+        {filteredPosts.length === 0 ? (
+          <EmptyState
+            icon={Sparkles}
+            title="No moments yet"
+            description="The community moments feed is fresh and awaiting its first memories. Be the first to publish a photo or video update!"
+            badge="Moments Feed"
+            actionLabel="Publish First Moment"
+            onAction={() => setIsCreateModalOpen(true)}
+            secondaryActionLabel="Refresh"
+            onSecondaryAction={() => window.location.reload()}
+            colorScheme="pink"
+          />
+        ) : (
+          filteredPosts.map((post) => (
           <motion.article
             key={post.id}
             initial={{ opacity: 0, y: 15 }}
@@ -333,7 +326,8 @@ export const MomentsTab: React.FC<MomentsTabProps> = ({
               </div>
             </div>
           </motion.article>
-        ))}
+        ))
+        )}
       </section>
 
       {/* Publish Article Modal */}

@@ -50,8 +50,12 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
     age: 25,
     region: 'Global HQ',
     isLive: true,
-    viewerCount: 9999,
+    isPopular: true,
+    isNew: false,
+    ratePerMin: 60,
     coinRatePerMin: 60,
+    callStatus: 'available',
+    viewerCount: 9999,
     tags: ['SuperAdmin', 'OfficialSupport'],
     bio: 'Official Amorex Super Admin & 24/7 Live Support Center',
     followersCount: 50000,
@@ -70,23 +74,30 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
     // Standard matching from conversations
     let result = conversations.filter((c) => {
       if (!q) return true;
+      const name = c.hostName || c.participantName || '';
+      const displayId = c.hostDisplayId || c.participantDisplayId || '';
       return (
-        c.hostName.toLowerCase().includes(q) ||
-        (c.hostDisplayId && c.hostDisplayId.toString().includes(q))
+        name.toLowerCase().includes(q) ||
+        displayId.toString().includes(q)
       );
     });
 
     // If query exists and searching for Super Admin '1000001' or 'admin'
     if (q === '1000001' || q.includes('admin')) {
-      const hasAdminInConv = result.some((c) => c.hostDisplayId === '1000001' || c.hostId === 'admin_1000001');
+      const hasAdminInConv = result.some((c) => (c.hostDisplayId || c.participantDisplayId) === '1000001' || (c.hostId || c.participantId) === 'admin_1000001');
       if (!hasAdminInConv) {
         result = [
           {
             id: 'conv_super_admin_1000001',
+            participantId: 'admin_1000001',
+            participantDisplayId: '1000001',
+            participantName: 'Adnex Super Admin',
+            participantAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
             hostId: 'admin_1000001',
             hostName: 'Adnex Super Admin',
             hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
             hostDisplayId: '1000001',
+            isOnline: true,
             lastMessage: 'Official Amorex Support & Management',
             lastMessageTime: 'Online',
             unreadCount: 0,
@@ -108,13 +119,18 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
     // Search among registered users list if query is a numeric ID
     if (q && /^\d+$/.test(q) && q !== '1000001') {
       const matchedUser = registeredUsers.find((u) => u.displayId === q || u.id === q);
-      if (matchedUser && !result.some((c) => c.hostDisplayId === matchedUser.displayId)) {
+      if (matchedUser && !result.some((c) => (c.hostDisplayId || c.participantDisplayId) === matchedUser.displayId)) {
         result.push({
           id: `conv_${matchedUser.id}`,
+          participantId: matchedUser.id,
+          participantDisplayId: matchedUser.displayId,
+          participantName: matchedUser.name,
+          participantAvatar: matchedUser.avatar,
           hostId: matchedUser.id,
           hostName: matchedUser.name,
           hostAvatar: matchedUser.avatar,
           hostDisplayId: matchedUser.displayId,
+          isOnline: true,
           lastMessage: `Registered User (ID: ${matchedUser.displayId})`,
           lastMessageTime: 'Active',
           unreadCount: 0,
@@ -135,20 +151,29 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
   const handleInitiateDirectCall = (conv: ChatConversation) => {
     sound.playClick();
     
+    const hostId = conv.hostId || conv.participantId;
+    const hostDisplayId = conv.hostDisplayId || conv.participantDisplayId || '1000001';
+    const hostName = conv.hostName || conv.participantName;
+    const hostAvatar = conv.hostAvatar || conv.participantAvatar;
+
     // Find matching host object or create dynamic StreamHost object for call session
-    const targetHost: StreamHost = hosts.find((h) => h.id === conv.hostId || h.displayId === conv.hostDisplayId) || {
-      id: conv.hostId,
-      displayId: conv.hostDisplayId || '1000001',
-      name: conv.hostName,
-      avatar: conv.hostAvatar,
-      coverImage: conv.hostAvatar,
+    const targetHost: StreamHost = hosts.find((h) => h.id === hostId || h.displayId === hostDisplayId) || {
+      id: hostId,
+      displayId: hostDisplayId,
+      name: hostName,
+      avatar: hostAvatar,
+      coverImage: hostAvatar,
       level: 10,
       gender: 'female',
       age: 24,
       region: 'Global',
       isLive: true,
-      viewerCount: 1,
+      isPopular: false,
+      isNew: false,
+      ratePerMin: 60,
       coinRatePerMin: 60,
+      callStatus: 'available',
+      viewerCount: 1,
       tags: ['1v1Call'],
       bio: 'Connected via Messages',
       followersCount: 100,
@@ -223,7 +248,11 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
           </div>
         ) : (
           filteredList.map((conv) => {
-            const isSuperAdmin = conv.hostDisplayId === '1000001' || conv.hostId === 'admin_1000001';
+            const hostDisplayId = conv.hostDisplayId || conv.participantDisplayId || '1000001';
+            const hostId = conv.hostId || conv.participantId;
+            const hostName = conv.hostName || conv.participantName || 'User';
+            const hostAvatar = conv.hostAvatar || conv.participantAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400';
+            const isSuperAdmin = hostDisplayId === '1000001' || hostId === 'admin_1000001';
 
             return (
               <motion.div
@@ -244,8 +273,8 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   <div className="relative shrink-0">
                     <img
                       referrerPolicy="no-referrer"
-                      src={conv.hostAvatar}
-                      alt={conv.hostName}
+                      src={hostAvatar}
+                      alt={hostName}
                       className={`w-11 h-11 rounded-full object-cover border-2 ${
                         isSuperAdmin ? 'border-amber-400' : 'border-pink-500'
                       }`}
@@ -260,11 +289,11 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <h4 className="text-xs font-black text-white truncate flex items-center gap-1">
-                        <span>{conv.hostName}</span>
+                        <span>{hostName}</span>
                         {isSuperAdmin && <ShieldCheck size={13} className="text-amber-400 shrink-0" />}
                       </h4>
                       <span className="text-[9px] font-mono text-pink-300 bg-pink-500/20 px-1.5 py-0.2 rounded-full border border-pink-500/30">
-                        ID: {conv.hostDisplayId || '1000001'}
+                        ID: {hostDisplayId}
                       </span>
                     </div>
                     <p className="text-[11px] text-gray-400 truncate mt-0.5">
@@ -278,7 +307,7 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   <button
                     onClick={() => {
                       sound.playClick();
-                      onOpenGiftDrawer(conv.hostName);
+                      onOpenGiftDrawer(hostName);
                     }}
                     title="Send Gift"
                     className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-amber-300 transition-colors cursor-pointer"
@@ -322,19 +351,19 @@ export const MessagesTab: React.FC<MessagesTabProps> = ({
                   </button>
                   <img
                     referrerPolicy="no-referrer"
-                    src={activeConversation.hostAvatar}
-                    alt={activeConversation.hostName}
+                    src={activeConversation.hostAvatar || activeConversation.participantAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'}
+                    alt={activeConversation.hostName || activeConversation.participantName}
                     className="w-9 h-9 rounded-full object-cover border-2 border-pink-500"
                   />
                   <div>
                     <h4 className="text-xs font-black text-white flex items-center gap-1">
-                      <span>{activeConversation.hostName}</span>
-                      {activeConversation.hostDisplayId === '1000001' && (
+                      <span>{activeConversation.hostName || activeConversation.participantName}</span>
+                      {(activeConversation.hostDisplayId || activeConversation.participantDisplayId) === '1000001' && (
                         <ShieldCheck size={12} className="text-amber-400" />
                       )}
                     </h4>
                     <span className="text-[10px] text-pink-300 font-mono">
-                      ID: {activeConversation.hostDisplayId || '1000001'} • Online
+                      ID: {activeConversation.hostDisplayId || activeConversation.participantDisplayId || '1000001'} • Online
                     </span>
                   </div>
                 </div>

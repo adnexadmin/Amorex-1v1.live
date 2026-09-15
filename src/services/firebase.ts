@@ -17,9 +17,15 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  getDocFromServer
+  getDocFromServer,
+  collection,
+  query,
+  orderBy,
+  limit,
+  onSnapshot,
+  getDocs
 } from 'firebase/firestore';
-import { UserProfile, UserLocationData } from '../types';
+import { UserProfile, UserLocationData, UserEngagementMetrics } from '../types';
 import {
   SUPER_ADMIN_EMAIL,
   isSuperAdminEmail,
@@ -427,3 +433,120 @@ export async function signOutFirebaseUser(): Promise<void> {
     localStorage.removeItem('amorex_current_user');
   }
 }
+
+function cleanFirestoreData<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        cleaned[key] = cleanFirestoreData(value);
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Save / Update User Engagement Metrics Session in Firebase 'analytics' collection
+ */
+export async function saveEngagementMetricsToFirestore(metrics: UserEngagementMetrics): Promise<void> {
+  const path = `analytics/${metrics.sessionId}`;
+  try {
+    if (!auth.currentUser) {
+      await ensureAuthSession();
+    }
+    const safePayload = cleanFirestoreData({
+      ...metrics,
+      userId: metrics.userId || auth.currentUser?.uid || 'guest',
+      userDisplayId: metrics.userDisplayId || '88200000',
+      userName: metrics.userName || 'Guest User',
+      userEmail: metrics.userEmail || '',
+      role: metrics.role || 'USER',
+      updatedAt: new Date().toISOString()
+    });
+    await setDoc(
+      doc(db, 'analytics', metrics.sessionId),
+      safePayload,
+      { merge: true }
+    );
+  } catch (error) {
+    console.warn('Firestore analytics save error:', error);
+    try {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    } catch {
+      // Telemetry error handled defensively
+    }
+  }
+}
+
+/**
+ * Subscribe to real-time analytics stream for Super Admin dashboard
+ */
+export function subscribeToAnalyticsSessions(
+  onUpdate: (sessions: UserEngagementMetrics[]) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const path = 'analytics';
+  try {
+    const q = query(
+      collection(db, path),
+      orderBy('lastActiveTime', 'desc'),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const sessions: UserEngagementMetrics[] = [];
+        snapshot.forEach((docSnap) => {
+          sessions.push(docSnap.data() as UserEngagementMetrics);
+        });
+        onUpdate(sessions);
+      },
+      (error) => {
+        console.warn('Firestore analytics snapshot listener error:', error);
+        try {
+          handleFirestoreError(error, OperationType.LIST, path);
+        } catch (e: any) {
+          onError?.(e);
+        }
+      }
+    );
+
+    return unsubscribe;
+  } catch (err: any) {
+    console.warn('Failed to attach analytics snapshot listener:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Fetch analytics sessions snapshot
+ */
+export async function fetchAnalyticsSessions(): Promise<UserEngagementMetrics[]> {
+  const path = 'analytics';
+  try {
+    const q = query(
+      collection(db, path),
+      orderBy('lastActiveTime', 'desc'),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    const sessions: UserEngagementMetrics[] = [];
+    snap.forEach((docSnap) => {
+      sessions.push(docSnap.data() as UserEngagementMetrics);
+    });
+    return sessions;
+  } catch (error) {
+    console.warn('Firestore analytics fetch error:', error);
+    try {
+      handleFirestoreError(error, OperationType.LIST, path);
+    } catch {
+      // fallback
+    }
+    return [];
+  }
+}
+
