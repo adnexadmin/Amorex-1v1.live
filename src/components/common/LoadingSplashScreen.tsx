@@ -5,11 +5,23 @@ import { motion } from 'motion/react';
 
 interface LoadingSplashScreenProps {
   message?: string;
+  onDismiss?: () => void;
 }
 
 export const LoadingSplashScreen: React.FC<LoadingSplashScreenProps> = ({
-  message = 'Connecting to Amorex Universe...'
+  message = 'Connecting to Amorex Universe...',
+  onDismiss
 }) => {
+  const [showBypass, setShowBypass] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    // Reveal bypass escape button after 1.2s to prevent users from ever getting stuck
+    const timer = setTimeout(() => {
+      setShowBypass(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div
       id="amorex-splash-screen"
@@ -76,6 +88,18 @@ export const LoadingSplashScreen: React.FC<LoadingSplashScreenProps> = ({
           <span className="w-1.5 h-1.5 rounded-full bg-[#00D2FF] animate-ping delay-150" />
           <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] animate-ping delay-300" />
         </div>
+
+        {/* Emergency Continue Bypass Button */}
+        {showBypass && onDismiss && (
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            onClick={onDismiss}
+            className="mt-6 px-5 py-2.5 rounded-full bg-gradient-to-r from-[#FF2E93] to-[#00D2FF] hover:opacity-90 active:scale-95 text-white font-bold text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(255,46,147,0.5)] cursor-pointer transition-all"
+          >
+            Enter Amorex Live ➜
+          </motion.button>
+        )}
       </div>
     </div>
   );

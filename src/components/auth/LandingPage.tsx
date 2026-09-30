@@ -40,12 +40,14 @@ interface LandingPageProps {
   onOpenAuth?: (initialMode?: 'login' | 'signup') => void;
   onOpenAuthModal?: (initialMode?: 'login' | 'signup') => void;
   onAdminLogin?: (user: UserProfile) => void;
+  onGuestLogin?: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
   onOpenAuthModal,
-  onAdminLogin
+  onAdminLogin,
+  onGuestLogin
 }) => {
   const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
@@ -324,6 +326,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span>ENTER AMOREX LIVE</span>
               <ArrowRight size={18} />
             </button>
+
+            {onGuestLogin && (
+              <button
+                id="landing-guest-explore-btn"
+                onClick={() => {
+                  try { sound.playSuccess(); } catch {}
+                  onGuestLogin();
+                }}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-white/10 hover:bg-white/15 border border-pink-500/40 text-pink-200 hover:text-white font-bold text-sm shadow-[0_0_15px_rgba(255,46,147,0.3)] hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              >
+                <Sparkles size={16} className="text-[#FFD700] animate-pulse" />
+                <span>Instant Guest Explore (ഒരു ക്ലിക്ക് പ്രവേശനം)</span>
+              </button>
+            )}
 
             <button
               id="landing-install-pwa-btn"

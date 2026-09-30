@@ -145,7 +145,7 @@
   <body>
     <div id="root">
       <!-- Pre-hydration Branded Splash Screen (Zero-blank initial load) -->
-      <div style="position:fixed;inset:0;background-color:#090A15;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#ffffff;z-index:9999;">
+      <div id="pre-hydration-splash" style="position:fixed;inset:0;background-color:#090A15;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#ffffff;z-index:9999;transition:opacity 0.4s ease, visibility 0.4s ease;">
         <div style="width:72px;height:72px;border-radius:24px;background:linear-gradient(135deg,#FF1744,#FF2E93,#00D2FF);display:flex;align-items:center;justify-content:center;box-shadow:0 0 35px rgba(255,46,147,0.5);margin-bottom:20px;">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
@@ -158,6 +158,9 @@
           Romantic Social Universe & 1v1 Video
         </div>
         <div style="width:36px;height:36px;border-radius:50%;border:2.5px solid rgba(255,255,255,0.1);border-top-color:#FF2E93;border-right-color:#00D2FF;animation:amorex-pre-spin 0.8s linear infinite;"></div>
+        <button id="splash-bypass-btn" onclick="try{sessionStorage.clear();if(window.caches){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})});}}catch(e){}window.location.reload();" style="display:none;margin-top:24px;padding:10px 24px;border-radius:999px;background:linear-gradient(90deg,#FF2E93,#00D2FF);color:#ffffff;font-size:12px;font-weight:800;border:none;cursor:pointer;letter-spacing:1px;box-shadow:0 0 20px rgba(255,46,147,0.6);">
+          OPEN APP ➜
+        </button>
         <style>
           @keyframes amorex-pre-spin {
             0% { transform: rotate(0deg); }
@@ -167,6 +170,31 @@
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (function() {
+        // Output early console diagnostics before React module loads
+        try {
+          var userRaw = localStorage.getItem('amorex_user');
+          console.log('[Early Diagnostic] LocalStorage amorex_user detected:', Boolean(userRaw));
+        } catch(e) {
+          console.warn('[Early Diagnostic] LocalStorage error:', e);
+        }
+
+        // Auto-dismiss splash screen failsafe after 600ms
+        setTimeout(function() {
+          var splash = document.getElementById('pre-hydration-splash');
+          if (splash) {
+            splash.style.opacity = '0';
+            splash.style.pointerEvents = 'none';
+            setTimeout(function() {
+              if (splash && splash.parentNode) {
+                splash.parentNode.removeChild(splash);
+              }
+            }, 400);
+          }
+        }, 600);
+      })();
+    </script>
   </body>
 </html>
 

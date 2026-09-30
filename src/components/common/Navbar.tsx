@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../../types';
 import { sound } from '../../utils/audio';
-import { Volume2, VolumeX, Plus, Sparkles, Bell, Crown, ChevronRight, X, Heart, Gift, MessageSquare, Download, Share2 } from 'lucide-react';
+import { Volume2, VolumeX, Plus, Sparkles, Bell, Crown, ChevronRight, X, Heart, Gift, MessageSquare, Download, Share2, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AmorexLogo } from './AmorexLogo';
 import { LanguageSelector } from './LanguageSelector';
@@ -16,6 +16,7 @@ interface NavbarProps {
   onOpenProfile?: () => void;
   onOpenInstallModal?: () => void;
   onOpenShare?: () => void;
+  onOpenPageOrganizer?: () => void;
   activeCoinRain?: boolean;
   onClaimCoinRain?: () => void;
 }
@@ -44,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenProfile,
   onOpenInstallModal,
   onOpenShare,
+  onOpenPageOrganizer,
   activeCoinRain,
   onClaimCoinRain
 }) => {
@@ -358,6 +360,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/30 text-emerald-300 font-extrabold border border-emerald-400/30">
                     10%
                   </span>
+                </button>
+              )}
+
+              {/* Organize PDF & Photo to PDF Grid Button */}
+              {onOpenPageOrganizer && (
+                <button
+                  id="navbar-page-organizer-btn"
+                  onClick={() => {
+                    sound.playClick();
+                    onOpenPageOrganizer();
+                  }}
+                  aria-label="Organize PDF & Photos"
+                  className="px-2 py-1 sm:px-2.5 sm:py-1 rounded-full bg-gradient-to-r from-pink-500/20 via-purple-500/20 to-pink-500/20 border border-pink-400/40 hover:border-pink-300 text-pink-300 hover:text-white flex items-center gap-1 text-[10px] sm:text-[11px] font-bold transition-all shadow-[0_0_10px_rgba(255,46,147,0.2)] shrink-0 cursor-pointer active:scale-95"
+                  title="Organize PDF & Photo to PDF (Mobile Touch & Drag-and-Drop Grid)"
+                >
+                  <Layers size={11} className="text-pink-400" />
+                  <span className="hidden lg:inline">PDF Organizer</span>
                 </button>
               )}
 

@@ -61,6 +61,7 @@ import { SupportAIBotModal } from './components/modals/SupportAIBotModal';
 import { MediaPermissionModal } from './components/modals/MediaPermissionModal';
 import { AppShareModal } from './components/modals/AppShareModal';
 import { AgentPromotionModal } from './components/modals/AgentPromotionModal';
+import { PhotoToPdfOrganizerModal } from './components/modals/PhotoToPdfOrganizerModal';
 import { LoadingSplashScreen } from './components/common/LoadingSplashScreen';
 
 // 5 Core Tabs
@@ -79,7 +80,7 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('LIVE');
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalInitialMode, setAuthModalInitialMode] = useState<'login' | 'signup'>('login');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
@@ -89,9 +90,18 @@ export function App() {
   const [supportBotContext, setSupportBotContext] = useState<{ source: string; query: string } | undefined>();
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isAgentPromoModalOpen, setIsAgentPromoModalOpen] = useState<boolean>(false);
+  const [isPageOrganizerOpen, setIsPageOrganizerOpen] = useState<boolean>(false);
   const [spentCoinsForPromo, setSpentCoinsForPromo] = useState<number>(0);
   const [hasShownAgentPromoSession, setHasShownAgentPromoSession] = useState<boolean>(false);
   const [mediaPermissionTargetHost, setMediaPermissionTargetHost] = useState<StreamHost | null>(null);
+
+  // Safety guardrail: Never allow auth loading to freeze the app
+  useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      setIsAuthLoading(false);
+    }, 600);
+    return () => clearTimeout(safetyTimer);
+  }, []);
 
   // Gifting state
   const [isGiftDrawerOpen, setIsGiftDrawerOpen] = useState<boolean>(false);
@@ -190,59 +200,58 @@ export function App() {
           const localProfile = JSON.parse(savedUserRaw);
           if (localProfile && isMounted) {
             setCurrentUser(localProfile);
-            setIsAuthLoading(false);
           }
         } catch (e) {
           console.warn('LocalStorage session restore note:', e);
         }
       }
 
+      // Always ensure loading screen is unblocked immediately
+      if (isMounted) {
+        setIsAuthLoading(false);
+      }
+
       // Sync Firebase Auth Session in background
-      const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-        try {
-          if (fbUser) {
-            const cloudProfile = await getUserFromFirestore(fbUser.uid);
-            if (cloudProfile && isMounted) {
-              setCurrentUser(cloudProfile);
-              localStorage.setItem('amorex_user', JSON.stringify(cloudProfile));
-              if (!cloudProfile.isOnboarded && !cloudProfile.is_super_admin) {
-                setIsOnboardingOpen(true);
+      try {
+        const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+          try {
+            if (fbUser) {
+              const cloudProfile = await getUserFromFirestore(fbUser.uid);
+              if (cloudProfile && isMounted) {
+                setCurrentUser(cloudProfile);
+                localStorage.setItem('amorex_user', JSON.stringify(cloudProfile));
+                if (!cloudProfile.isOnboarded && !cloudProfile.is_super_admin) {
+                  setIsOnboardingOpen(true);
+                }
               }
-            }
-          } else {
-            // If Super Admin or local session exists, do NOT auto logout on refresh
-            const activeLocalUser = localStorage.getItem('amorex_user');
-            if (activeLocalUser) {
-              try {
-                const parsedUser: UserProfile = JSON.parse(activeLocalUser);
-                if (parsedUser.is_super_admin || parsedUser.displayId === '1000001') {
+            } else {
+              // If Super Admin or local session exists, do NOT auto logout on refresh
+              const activeLocalUser = localStorage.getItem('amorex_user');
+              if (activeLocalUser) {
+                try {
+                  const parsedUser: UserProfile = JSON.parse(activeLocalUser);
                   if (isMounted) {
                     setCurrentUser(parsedUser);
-                    setIsAuthLoading(false);
                   }
-                  return;
+                } catch (err) {
+                  console.warn('Local session verification error:', err);
                 }
-              } catch (err) {
-                console.warn('Local session verification error:', err);
               }
             }
-
-            // Trigger login modal only when no local session exists
-            if (isMounted && !localStorage.getItem('amorex_user')) {
-              setCurrentUser(null);
-              setIsAuthModalOpen(true);
+          } catch (err) {
+            console.warn('Auth state sync fallback:', err);
+          } finally {
+            if (isMounted) {
+              setIsAuthLoading(false);
             }
           }
-        } catch (err) {
-          console.warn('Auth state sync fallback:', err);
-        } finally {
-          if (isMounted) {
-            setIsAuthLoading(false);
-          }
-        }
-      });
-
-      return unsubscribe;
+        });
+        return unsubscribe;
+      } catch (err) {
+        console.warn('onAuthStateChanged subscription error:', err);
+        if (isMounted) setIsAuthLoading(false);
+        return () => {};
+      }
     };
 
     let cleanupUnsubscribe: (() => void) | undefined;
@@ -709,9 +718,38 @@ export function App() {
     );
   };
 
-  if (isAuthLoading) {
-    return <LoadingSplashScreen message="Authenticating session..." />;
-  }
+  const handleGuestLogin = () => {
+    sound.playSuccess();
+    const guestId = 'guest_' + Math.random().toString(36).substring(2, 9);
+    const guestUser: UserProfile = {
+      id: guestId,
+      displayId: Math.floor(10000000 + Math.random() * 90000000).toString(),
+      name: 'Amorex Explorer',
+      username: 'Amorex Explorer',
+      email: `${guestId}@amorex.live`,
+      gender: 'female',
+      age: 22,
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      region: 'India',
+      bio: 'Exploring Amorex Live ✨',
+      role: 'USER',
+      coins: 1000,
+      gems: 100,
+      vouchers: 3,
+      level: 1,
+      experience: 100,
+      followingCount: 0,
+      followersCount: 10,
+      friendsCount: 2,
+      isVerifiedHost: false,
+      faceVerified: true,
+      is_super_admin: false,
+      isRealUser: true,
+      isOnboarded: true,
+      deviceFingerprint: 'guest_fp_' + Date.now()
+    };
+    handleAuthSuccess(guestUser);
+  };
 
   if (!currentUser) {
     return (
@@ -722,6 +760,7 @@ export function App() {
             setIsAuthModalOpen(true);
           }}
           onAdminLogin={(adminUser) => handleAuthSuccess(adminUser)}
+          onGuestLogin={handleGuestLogin}
         />
 
         {isAuthModalOpen && (
@@ -748,6 +787,7 @@ export function App() {
         onOpenRecharge={() => setIsRechargeModalOpen(true)}
         onOpenAdminSuite={() => setIsAdminSuiteOpen(true)}
         onOpenShare={() => setIsShareModalOpen(true)}
+        onOpenPageOrganizer={() => setIsPageOrganizerOpen(true)}
         activeCoinRain={isCoinRainActive}
       />
 
@@ -1017,6 +1057,12 @@ export function App() {
           setIsShareModalOpen(true);
         }}
         triggerSpentCoins={spentCoinsForPromo}
+      />
+
+      {/* Organize PDF & Photo to PDF Touch Reordering Grid Modal */}
+      <PhotoToPdfOrganizerModal
+        isOpen={isPageOrganizerOpen}
+        onClose={() => setIsPageOrganizerOpen(false)}
       />
     </div>
   );

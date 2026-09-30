@@ -28,6 +28,11 @@ class SoundEngine {
     return this.isMuted;
   }
 
+  // Soft success chime
+  public playSuccess() {
+    this.playHeartLike();
+  }
+
   // Soft UI click
   public playClick() {
     if (this.isMuted) return;
