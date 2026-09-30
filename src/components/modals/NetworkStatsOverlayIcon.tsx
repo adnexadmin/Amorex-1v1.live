@@ -33,6 +33,9 @@ export interface NetworkStatsOverlayIconProps {
   onSimulateSpike?: () => void;
   onTriggerReconnect?: () => void;
   onOpenFullDiagnostics?: () => void;
+  onToggleSimulationMode?: () => void;
+  onSetSimulationMode?: (mode: 'auto' | 'good' | 'fair' | 'poor') => void;
+  simulationMode?: 'auto' | 'good' | 'fair' | 'poor';
   className?: string;
   id?: string;
 }
@@ -51,6 +54,9 @@ export const NetworkStatsOverlayIcon: React.FC<NetworkStatsOverlayIconProps> = (
   onSimulateSpike,
   onTriggerReconnect,
   onOpenFullDiagnostics,
+  onToggleSimulationMode,
+  onSetSimulationMode,
+  simulationMode = 'auto',
   className = '',
   id = 'network-stats-overlay-icon'
 }) => {
@@ -236,6 +242,29 @@ export const NetworkStatsOverlayIcon: React.FC<NetworkStatsOverlayIconProps> = (
           <span className={strength.color.text}>{Math.round(latencyMs)}ms</span>
         </span>
 
+        {/* Quick Simulation Mode Cycle Toggle Button */}
+        {onToggleSimulationMode && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSimulationMode();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                onToggleSimulationMode();
+              }
+            }}
+            title="Click to toggle network latency simulation (Green ➔ Yellow ➔ Red)"
+            className="p-1 rounded-full hover:bg-white/20 text-white/60 hover:text-white transition-colors cursor-pointer ml-0.5 flex items-center justify-center"
+            aria-label="Toggle mock latency simulation"
+          >
+            <RefreshCw size={10} className="hover:rotate-180 transition-transform duration-300" />
+          </span>
+        )}
+
         {/* Expand/Collapse Caret */}
         <span className="text-white/40 group-hover:text-white transition-colors ml-0.5">
           {isOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
@@ -251,7 +280,7 @@ export const NetworkStatsOverlayIcon: React.FC<NetworkStatsOverlayIconProps> = (
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -6 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="absolute top-full mt-2 left-0 z-50 w-72 sm:w-80 bg-slate-950/95 backdrop-blur-2xl border border-white/20 rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_30px_rgba(0,210,255,0.15)] text-white text-xs"
+            className="absolute top-full mt-2 right-0 z-50 w-72 sm:w-80 bg-slate-950/95 backdrop-blur-2xl border border-white/20 rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_30px_rgba(0,210,255,0.15)] text-white text-xs"
           >
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
@@ -374,6 +403,75 @@ export const NetworkStatsOverlayIcon: React.FC<NetworkStatsOverlayIconProps> = (
                 </span>
               </div>
             </div>
+
+            {/* Mock Network Latency Simulation (Toggle Color) */}
+            {(onToggleSimulationMode || onSetSimulationMode) && (
+              <div className="mt-2.5 pt-2.5 border-t border-white/10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] text-gray-300 font-bold flex items-center gap-1">
+                    <Signal size={11} className={strength.color.text} />
+                    Mock Latency Simulation:
+                  </span>
+                  <span className={`text-[9px] uppercase font-mono font-bold px-1.5 py-0.5 rounded-full ${strength.color.badgeBg}`}>
+                    {simulationMode} mode
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onSetSimulationMode ? onSetSimulationMode('good') : onToggleSimulationMode?.()}
+                    className={`py-1 px-1 rounded-lg border text-[9px] font-bold text-center transition-all cursor-pointer ${
+                      strength.level === 'strong' && simulationMode === 'good'
+                        ? 'bg-emerald-500/30 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/50'
+                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-emerald-500/10'
+                    }`}
+                    title="Simulate Strong Signal (Green Bars, ~28ms)"
+                  >
+                    🟢 Green
+                    <span className="block text-[8px] font-mono text-emerald-300">&lt;60ms</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetSimulationMode ? onSetSimulationMode('fair') : onToggleSimulationMode?.()}
+                    className={`py-1 px-1 rounded-lg border text-[9px] font-bold text-center transition-all cursor-pointer ${
+                      strength.level === 'fair' && simulationMode === 'fair'
+                        ? 'bg-amber-500/30 border-amber-400 text-amber-200 ring-1 ring-amber-400/50'
+                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-amber-500/10'
+                    }`}
+                    title="Simulate Fair Signal (Yellow Bars, ~95ms)"
+                  >
+                    🟡 Yellow
+                    <span className="block text-[8px] font-mono text-amber-300">~95ms</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetSimulationMode ? onSetSimulationMode('poor') : onToggleSimulationMode?.()}
+                    className={`py-1 px-1 rounded-lg border text-[9px] font-bold text-center transition-all cursor-pointer ${
+                      strength.level === 'weak' && simulationMode === 'poor'
+                        ? 'bg-rose-500/30 border-rose-400 text-rose-200 ring-1 ring-rose-400/50'
+                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-rose-500/10'
+                    }`}
+                    title="Simulate Poor Signal (Red Bars, ~185ms)"
+                  >
+                    🔴 Red
+                    <span className="block text-[8px] font-mono text-rose-300">&gt;150ms</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetSimulationMode ? onSetSimulationMode('auto') : onToggleSimulationMode?.()}
+                    className={`py-1 px-1 rounded-lg border text-[9px] font-bold text-center transition-all cursor-pointer ${
+                      simulationMode === 'auto'
+                        ? 'bg-cyan-500/30 border-cyan-400 text-cyan-200 ring-1 ring-cyan-400/50'
+                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-cyan-500/10'
+                    }`}
+                    title="Auto live fluctuating simulation"
+                  >
+                    🔄 Auto
+                    <span className="block text-[8px] font-mono text-cyan-300">Live</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Interactive Actions (Spike test & Reconnect) */}
             {(onSimulateSpike || onTriggerReconnect || onOpenFullDiagnostics) && (

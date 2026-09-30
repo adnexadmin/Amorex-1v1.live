@@ -31,6 +31,7 @@ import {
   auth,
   db,
   getUserFromFirestore,
+  saveUserToFirestore,
   signOutFirebaseUser
 } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -62,6 +63,7 @@ import { MediaPermissionModal } from './components/modals/MediaPermissionModal';
 import { AppShareModal } from './components/modals/AppShareModal';
 import { AgentPromotionModal } from './components/modals/AgentPromotionModal';
 import { PhotoToPdfOrganizerModal } from './components/modals/PhotoToPdfOrganizerModal';
+import { DailyCheckInModal, DailyRewardTier } from './components/modals/DailyCheckInModal';
 import { LoadingSplashScreen } from './components/common/LoadingSplashScreen';
 
 // 5 Core Tabs
@@ -94,6 +96,8 @@ export function App() {
   const [spentCoinsForPromo, setSpentCoinsForPromo] = useState<number>(0);
   const [hasShownAgentPromoSession, setHasShownAgentPromoSession] = useState<boolean>(false);
   const [mediaPermissionTargetHost, setMediaPermissionTargetHost] = useState<StreamHost | null>(null);
+  const [isDailyCheckInOpen, setIsDailyCheckInOpen] = useState<boolean>(false);
+  const [hasPromptedDailyCheckInSession, setHasPromptedDailyCheckInSession] = useState<boolean>(false);
 
   // Safety guardrail: Never allow auth loading to freeze the app
   useEffect(() => {
@@ -102,6 +106,23 @@ export function App() {
     }, 600);
     return () => clearTimeout(safetyTimer);
   }, []);
+
+  // Daily Check-in Rewards: Show modal notification on first visit to Live tab
+  useEffect(() => {
+    if (activeTab === 'LIVE' && currentUser) {
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      const lastCheckIn = currentUser.lastLoginDate || currentUser.lastCheckInDate;
+      const alreadyClaimedToday = lastCheckIn === todayStr;
+
+      if (!alreadyClaimedToday && !hasPromptedDailyCheckInSession) {
+        const timer = setTimeout(() => {
+          setIsDailyCheckInOpen(true);
+          setHasPromptedDailyCheckInSession(true);
+        }, 350);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [activeTab, currentUser, hasPromptedDailyCheckInSession]);
 
   // Gifting state
   const [isGiftDrawerOpen, setIsGiftDrawerOpen] = useState<boolean>(false);
@@ -751,6 +772,26 @@ export function App() {
     handleAuthSuccess(guestUser);
   };
 
+  const handleClaimDailyReward = (reward: DailyRewardTier, newStreak: number) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    handleAddCoins(reward.coins);
+
+    if (currentUser) {
+      const updatedUser: UserProfile = {
+        ...currentUser,
+        coins: (currentUser.coins || 0) + reward.coins,
+        vouchers: (currentUser.vouchers || 0) + (reward.voucher || 0),
+        lastCheckInDate: todayStr,
+        lastLoginDate: todayStr,
+        signInStreak: newStreak,
+        signedDays: Array.from(new Set([...(currentUser.signedDays || []), newStreak]))
+      };
+      setCurrentUser(updatedUser);
+      saveRegisteredUser(updatedUser);
+      saveUserToFirestore(updatedUser);
+    }
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#090A15] text-white">
@@ -800,6 +841,7 @@ export function App() {
             onStart1v1Call={handleStart1v1Call}
             onOpenGiftDrawer={handleOpenGiftDrawer}
             onMinimizeStreamToPiP={(host) => setPipHost(host)}
+            onOpenDailyRewards={() => setIsDailyCheckInOpen(true)}
           />
         )}
 
@@ -1063,6 +1105,14 @@ export function App() {
       <PhotoToPdfOrganizerModal
         isOpen={isPageOrganizerOpen}
         onClose={() => setIsPageOrganizerOpen(false)}
+      />
+
+      {/* Daily Check-in Rewards Modal */}
+      <DailyCheckInModal
+        isOpen={isDailyCheckInOpen}
+        onClose={() => setIsDailyCheckInOpen(false)}
+        user={currentUser}
+        onClaimReward={handleClaimDailyReward}
       />
     </div>
   );

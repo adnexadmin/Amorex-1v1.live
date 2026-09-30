@@ -66,7 +66,9 @@ export interface UserProfile {
   isMuted?: boolean;
   isFrozen?: boolean;
   lastLoginDate?: string;
+  lastCheckInDate?: string;
   signInStreak?: number;
+  checkInStreak?: number;
   signedDays?: number[];
   registeredAt?: number;
   lastActiveAt?: number;

@@ -6,6 +6,7 @@ import { RomanticOverlaysLayer } from '../common/RomanticOverlaysLayer';
 import { VideoFilterDrawer } from './VideoFilterDrawer';
 import { getVideoFilterCSS, FILTER_PRESETS } from '../common/VideoFilters';
 import { ReportUserModal } from './ReportUserModal';
+import { NetworkStatsOverlayIcon } from './NetworkStatsOverlayIcon';
 import {
   Mic,
   MicOff,
@@ -114,13 +115,75 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
     toggleMic,
     toggleVideo,
     switchCamera,
-    endCall: closeRtc
+    endCall: closeRtc,
+    stats: rtcStats,
+    simulateNetworkSpike,
+    triggerManualReconnect
   } = useWebRtcCall({
     autoConnect: true,
     isVideoCall: true,
     callId: sharedCallSessionId,
     isCaller: true
   });
+
+  // Real-time Mock Network Latency Simulation Engine for Signal Strength Indicator
+  const [latencySimMode, setLatencySimMode] = useState<'auto' | 'good' | 'fair' | 'poor'>('auto');
+  const [mockLatency, setMockLatency] = useState<number>(32);
+  const [mockJitter, setMockJitter] = useState<number>(2.4);
+  const [mockPacketLoss, setMockPacketLoss] = useState<number>(0.0);
+
+  // Background Simulation Interval (Fluctuates realistic ping over time)
+  useEffect(() => {
+    if (latencySimMode === 'good') {
+      setMockLatency(28 + Math.floor(Math.random() * 8)); // 28 - 36ms (Green Bars)
+      setMockJitter(1.8);
+      setMockPacketLoss(0.0);
+      return;
+    }
+    if (latencySimMode === 'fair') {
+      setMockLatency(92 + Math.floor(Math.random() * 20)); // 92 - 112ms (Yellow Bars)
+      setMockJitter(10.5);
+      setMockPacketLoss(1.6);
+      return;
+    }
+    if (latencySimMode === 'poor') {
+      setMockLatency(175 + Math.floor(Math.random() * 35)); // 175 - 210ms (Red Bars)
+      setMockJitter(22.0);
+      setMockPacketLoss(4.8);
+      return;
+    }
+
+    // Auto mode: Gentle realistic fluctuation (mostly green, occasional fair/poor)
+    const interval = setInterval(() => {
+      setMockLatency((prev) => {
+        const rand = Math.random();
+        if (rand < 0.12) {
+          // Occasional high latency spike (Red: ~170ms)
+          return Math.floor(160 + Math.random() * 35);
+        } else if (rand < 0.32) {
+          // Moderate latency (Yellow: ~90ms)
+          return Math.floor(82 + Math.random() * 25);
+        } else {
+          // Normal optimal STUN connection (Green: ~26-44ms)
+          return Math.floor(26 + Math.random() * 18);
+        }
+      });
+      setMockJitter(Number((1.8 + Math.random() * 2.2).toFixed(1)));
+    }, 2800);
+
+    return () => clearInterval(interval);
+  }, [latencySimMode]);
+
+  // Handle toggling the mock network latency simulation (cycles Green -> Yellow -> Red -> Auto)
+  const handleToggleLatencySimulation = () => {
+    sound.playClick();
+    setLatencySimMode((prev) => {
+      if (prev === 'auto') return 'good';
+      if (prev === 'good') return 'fair';
+      if (prev === 'fair') return 'poor';
+      return 'auto';
+    });
+  };
 
   // Dynamic 45-Second Multiplier Calculator with Repeat Call Engine
   const getSlabCost = (slabIndex: number): { amount: number; label: string } => {
@@ -231,16 +294,43 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
           </div>
         )}
 
-        <RomanticOverlaysLayer
-          filterType={videoFilter}
-          intensity={filterIntensity}
-          enabled={showOverlays && !isComparing}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-transparent to-black/90 pointer-events-none" />
-      </div>
+      <RomanticOverlaysLayer
+        filterType={videoFilter}
+        intensity={filterIntensity}
+        enabled={showOverlays && !isComparing}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-transparent to-black/90 pointer-events-none" />
+    </div>
 
-      {/* 2. Top Header with Real-time Multiplier Status */}
-      <header className="relative z-20 w-full max-w-5xl px-4 pt-4 flex items-center justify-between">
+    {/* Persistent Call Duration Timer HUD (Fixed Top-Center in MM:SS format) */}
+    <div
+      id="active-call-persistent-timer"
+      aria-label="Active Call Duration Timer"
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/85 backdrop-blur-2xl border border-pink-500/60 shadow-[0_0_25px_rgba(255,46,147,0.45)] pointer-events-auto select-none"
+    >
+      <div className="relative flex items-center justify-center">
+        <span
+          className={`w-2 h-2 rounded-full absolute ${
+            callState === 'connected' ? 'bg-rose-500 animate-ping' : 'bg-amber-400 animate-ping'
+          }`}
+        />
+        <span
+          className={`w-2 h-2 rounded-full relative ${
+            callState === 'connected' ? 'bg-rose-500' : 'bg-amber-400'
+          }`}
+        />
+      </div>
+      <Clock size={13} className="text-pink-400 shrink-0" />
+      <span className="font-mono font-black text-xs sm:text-sm text-white tracking-widest">
+        {formatTime(callDuration)}
+      </span>
+      <span className="text-[10px] font-bold text-pink-300 border-l border-white/20 pl-2 uppercase">
+        {callState === 'connected' ? 'LIVE 1v1' : 'CONNECTING'}
+      </span>
+    </div>
+
+    {/* 2. Top Header with Real-time Multiplier Status */}
+    <header className="relative z-20 w-full max-w-5xl px-4 pt-4 flex items-center justify-between">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-xl rounded-full py-1.5 px-3 border border-white/20 shadow-xl">
             <img
@@ -273,6 +363,40 @@ export const PrivateCallOverlay: React.FC<PrivateCallOverlayProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Real-time Signal Strength Indicator with Cellular Bars Icon & Mock Network Latency Simulation */}
+          <NetworkStatsOverlayIcon
+            id="active-call-signal-indicator"
+            latencyMs={mockLatency}
+            bitrateKbps={rtcStats?.bitrateKbps || 2100}
+            jitterMs={mockJitter}
+            packetLossPercentage={mockPacketLoss}
+            connectionQuality={mockLatency < 60 ? 'excellent' : mockLatency < 140 ? 'fair' : 'poor'}
+            qualityScore={mockLatency < 60 ? 98 : mockLatency < 140 ? 76 : 42}
+            callDuration={callDuration}
+            simulationMode={latencySimMode}
+            onToggleSimulationMode={handleToggleLatencySimulation}
+            onSetSimulationMode={(mode) => {
+              sound.playClick();
+              setLatencySimMode(mode);
+            }}
+            onSimulateSpike={() => {
+              sound.playAlert();
+              simulateNetworkSpike?.();
+              setMockLatency(185);
+              setMockJitter(24.5);
+              setMockPacketLoss(5.2);
+              setTimeout(() => {
+                setMockLatency(32);
+                setMockJitter(2.2);
+                setMockPacketLoss(0.0);
+              }, 4000);
+            }}
+            onTriggerReconnect={() => {
+              sound.playClick();
+              triggerManualReconnect?.();
+            }}
+          />
+
           <div className="bg-gradient-to-r from-amber-500 to-pink-500 text-black px-2.5 py-1 rounded-full text-[10px] font-black flex items-center gap-1 shadow-lg animate-pulse">
             <Coins size={12} />
             <span>{currentRateText}</span>

@@ -20,7 +20,8 @@ import {
   ShieldCheck,
   Eye,
   UserCheck,
-  UserPlus
+  UserPlus,
+  Gift
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LiveStreamModal } from '../modals/LiveStreamModal';
@@ -49,6 +50,7 @@ interface LiveTabProps {
   onStart1v1Call: (host: StreamHost) => void;
   onOpenGiftDrawer: (hostName: string) => void;
   onMinimizeStreamToPiP?: (host: StreamHost) => void;
+  onOpenDailyRewards?: () => void;
 }
 
 export const LiveTab: React.FC<LiveTabProps> = ({
@@ -56,7 +58,8 @@ export const LiveTab: React.FC<LiveTabProps> = ({
   user,
   onStart1v1Call,
   onOpenGiftDrawer,
-  onMinimizeStreamToPiP
+  onMinimizeStreamToPiP,
+  onOpenDailyRewards
 }) => {
   const [subTab, setSubTab] = useState<'Popular' | 'New' | 'Follow'>('Popular');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -276,6 +279,44 @@ export const LiveTab: React.FC<LiveTabProps> = ({
 
   return (
     <div className="pb-24 max-w-6xl mx-auto px-2.5 sm:px-6 flex flex-col gap-3 sm:gap-4">
+      {/* Daily Check-in Rewards Quick Banner */}
+      {onOpenDailyRewards && (
+        <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-pink-500/15 via-purple-500/15 to-cyan-500/15 border border-pink-500/30 shadow-[0_0_20px_rgba(255,46,147,0.15)]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 via-pink-500 to-[#00D2FF] flex items-center justify-center text-white shadow-md text-sm">
+              🎁
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black text-white">Daily Check-in Rewards</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-bold">
+                  🔥 {user?.signInStreak || user?.checkInStreak || 1} Day Streak
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-300">
+                {(user?.lastLoginDate || user?.lastCheckInDate) === new Date().toLocaleDateString('en-CA')
+                  ? "Today's login bonus claimed ✓"
+                  : 'Bonus coins ready to claim for today!'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              sound.playClick();
+              onOpenDailyRewards();
+            }}
+            className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#FF2E93] to-[#00D2FF] hover:scale-105 active:scale-95 text-white font-black text-xs uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center gap-1"
+          >
+            <span>
+              {(user?.lastLoginDate || user?.lastCheckInDate) === new Date().toLocaleDateString('en-CA')
+                ? 'View Streak'
+                : 'Claim 🪙'}
+            </span>
+          </button>
+        </div>
+      )}
+
       {/* Top Sticky Navigation Bar with Direct Search */}
       <nav className="flex flex-col gap-2.5 px-1 sm:px-2 border-b border-white/10 bg-[#090A15]/90 backdrop-blur-md sticky top-12 sm:top-14 z-30 py-2.5 -mt-2">
         {/* Direct Search Bar for finding Users & Super Admin (1000001) */}

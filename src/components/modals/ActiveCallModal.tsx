@@ -23,6 +23,12 @@ export const ActiveCallModal: React.FC<ActiveCallModalProps> = (props) => {
   return <PrivateCallOverlay {...props} />;
 };
 
+export const formatCallDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
+
 export {
   PrivateCallOverlay,
   NetworkStatsOverlayIcon,
